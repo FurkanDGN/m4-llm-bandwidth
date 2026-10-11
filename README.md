@@ -16,6 +16,7 @@ Apple M4 Pro (24 GB, 273 GB/s) üzerinde, llama.cpp/Metal ile LLM decode hızın
 ## Yapı
 
 - `KNOWHOW.md` — komutlar, ölçüm düzeni, kernel tasarım ilkeleri, yama özeti, hata günlüğü
+- `BULUT-ANALIZ.md` — bağımsız denetim: ölçüm geçerliliği, darboğaz analizi, "acaba" soruları, yerel deney listesi
 - `SONUCLAR.md` — tüm ölçüm tabloları, kaynak etiketleriyle
 - `metal/` — Metal kernel'leri ve Swift ölçüm programları (mikro-ölçümler, dönüşüm, toplu mat-mat)
 - `llama_patch/` — llama.cpp Metal arka ucu küçük-batch yaması (.diff + uygulayıcı)
