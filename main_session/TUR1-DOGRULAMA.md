@@ -311,6 +311,26 @@ Kernel'in yük deseni zaten düzgün (coalesced qs, satırlara amortize y, tg-ta
 değişkenli ucuz kaldıracı kalmadı; E7 dersiyle (üst üste çürüyen kernel tahminleri) buradaki kazı
 durduruldu. IQ4_XS son durumu: NR0=8 ile 171.6 tok/s, 1.5B tavsiyesi değişmedi.
 
+### E20 eki: NR0 yaması 7B IQ4_XS'te de ölçüldü — kazanç +%4.4 (formata özel, modele özel değil)
+
+Soru: N_R0_IQ4_XS=8 yaması 1.5B'ye mi özgü? Bartowski Qwen2.5-7B-Instruct-IQ4_XS indirildi
+(4.213 GB; token_embd IQ4_XS 0.290 GB, output Q6_K 0.447 GB, tied değil → okunan 3.923 GB;
+taban 1.626 + 3.987×3.923 = 17.27 ms → 57.9 tok/s). Tek değişken A/B, her adımda derleme
+damgası + test-backend-ops 3/3 + 7B q4_0 kontrolü (tg128, 5 tekrar):
+
+| N_R0_IQ4_XS | 7B IQ4_XS tok/s | tabana oran | q4_0 kontrol |
+|---|---|---|---|
+| 8 (yama) | 52.09 ± 0.10 | %90.0 | 57.03 ± 0.08 |
+| 4 (upstream) | 49.91 ± 0.03 | %86.2 | 56.93 ± 0.09 |
+| 8 (geri alım doğrulama) | 51.94 ± 0.05 | %89.7 | 57.01 ± 0.04 |
+
+- Yama 7B'de de çalışıyor ama kazanç +%4.4 (1.5B'de +%38 idi): 7B'de kernel NR0=4 ile zaten
+  tabanın %86'sındaydı, amorti edilecek pay küçük. NR0 kazancı model küçüldükçe büyüyor
+  (satırlar kısaldıkça y-yükü amortismanı daha değerli).
+- Pratik not: 7B'de IQ4_XS (52.1) q4_0'dan (57.0) YAVAŞ, dosya ise neredeyse aynı boyutta
+  (3.92 vs 3.99 GiB; bartowski output'u Q6_K tuttuğu için bit tasarrufu erimiş). 7B'de hız
+  için q4_0, kalite için IQ4_XS; 1.5B'deki tablonun aynısı.
+
 ## 19. E21: 3.5 bpw düzlem formatı mat-vec'te TAVANDA — hızlı 3-bit'in yapıcı kanıtı
 
 Mikro: micro/mv3p.metal + mv3p.swift (16384×16384, SoA: 2-bit düzlem + 1-bit düzlem + blok-32 fp16 ölçek
