@@ -159,3 +159,19 @@ IQ kernel ameliyatı (uçtan uca hakemli):
   Geri tepenler: IQ3 ailesi 8'de −%5 (4'te kaldı), Q2_K=16 −%2, IQ4_XS=16 −%10, NR0 tatlı noktası format başına farklı — mikro-mimari görünmez olduğundan ancak ölçümle bulunuyor.
 - Değişiklik `llama_patch/nr0_tune.diff`te; test-backend-ops MUL_MAT tamamı OK.
 - Yeni resim: IQ4_XS 171.6 vs q4_0 183.3 — %16 küçük, PPL daha iyi (9.08<9.32), hız farkı %6.4'e indi.
+
+## 12. E14/E9/E17 + mikro-mimari kaynak notu
+
+- E14 (spekülatif araç/p_min): `llama-speculative-simple` (`--spec-type draft-simple`) aynı işte 61.4 tok/s — eski araçtan
+  (65.4) YAVAŞ; p_min>0 ise bu commit'te (e475fa2b5) `common_speculative_accept` assert'iyle ÇÖKÜYOR (çerçeve hatası).
+  E14 kapandı: araç değişikliği kazandırmıyor. Not: yeni çerçevede ngram-* spec türleri var (server'da taslaksız lookup kapısı).
+- E9 (taslak kapsamı, ne00%256→%32): 0.5B greedy çıktısı SB=0/1 birebir aynı (değişiklik doğru) ama spec k=2 hızı değişmedi
+  (65.2-65.6 ≈ 65.4) — bulut kriteri tetiklendi: taslak partileri zaten ucuz. Sıfır kazanç için yüzey büyütmemek adına geri alındı.
+- E17 (MLX kıyası): mlx-community/Qwen2.5-0.5B-Instruct-4bit üretim 431.7 tok/s vs llama.cpp q4_0 330 (+%31 MLX).
+  Eşik (≥420) aşıldı [Ö]: sabit masraf (1.63 ms) donanım tabanı değil; MLX'te ~0.9 ms'ye düşüyor. Küçük model/taslak
+  hızının gerçek sınırı çerçeve; llama.cpp küçük modelde token başına ~0.7 ms masayı bırakıyor. (Quant/tokenizer farkı
+  not edildi; %31 bu farklardan büyük.)
+- Mikro-mimari kütüphanesi: `~/Documents/deneyler/apple-silicon-docs/` (CPU: applecpu, M1 Explainer 8 cilt, SME, Oakley;
+  GPU: gpu-applegpu, gpu-metal-benchmarks). metal-benchmarks README'si NR0 bulgusunun geriye dönük açıklamasını veriyor:
+  yazmaç fazla ayrılınca occupancy düşer (çekirdek başına ≤24 simd), ALU kullanımı komut karışımından tahmin edilebilir —
+  "NR0=16 neden kötü" artık belgeyle açıklanabilir durumda.
