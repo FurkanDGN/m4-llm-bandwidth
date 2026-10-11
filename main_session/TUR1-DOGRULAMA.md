@@ -175,3 +175,21 @@ IQ kernel ameliyatı (uçtan uca hakemli):
   GPU: gpu-applegpu, gpu-metal-benchmarks). metal-benchmarks README'si NR0 bulgusunun geriye dönük açıklamasını veriyor:
   yazmaç fazla ayrılınca occupancy düşer (çekirdek başına ≤24 simd), ALU kullanımı komut karışımından tahmin edilebilir —
   "NR0=16 neden kötü" artık belgeyle açıklanabilir durumda.
+
+## 13. E10: gerçek okuma tavanı ve ısınma etkisi — D1 anomalisi çözüldü
+
+Bağımsız bant ölçeri (micro/band.metal: r4=eski 4-akış deseni, r8=8 uçuşta, rc=threadgroup'a bitişik 64 KB):
+
+| desen | 302 MB soğuk | 2 GB | 302 MB + 500 ms ısınma |
+|---|---|---|---|
+| r4 (eski stream_read) | 194 / 215 | 248 / 254 | 258 / 260 |
+| r8 | 255 / 259 | 246 / 250 | 259 / 260 |
+| rc | 260 / 264 | 256 / 259 | 260 / 263 |
+
+(medyan / en iyi, GB/s)
+
+- GERÇEK TAVAN ≈ 258-264 GB/s (teorik 273'ün %95-97'si). Eski referans 254.3 düşük ölçümmüş (desen + soğukluk).
+- D1 anomalisi kapandı: bench15 B=1'in 258 GB/s'si tavan ÜSTÜ değil, tam tavan. q4_0 B=1 kernel'i gerçekten optimal.
+- E2 uydurmasının eğimi (250.8) gerçek tavanın %96.5'i.
+- Isınmasız kısa ölçüm −%25'e kadar sapıyor (DVFS): bundan sonra her mutlak GB/s ölçümünde ≥500 ms ön ısıtma zorunlu;
+  D2'nin ±%3-6 "program farkı" büyük ölçüde buydu.
