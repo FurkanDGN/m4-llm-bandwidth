@@ -386,3 +386,50 @@ mlx_lm convert ile Qwen2.5-1.5B → 3-bit grup-64 (3.501 bpw ölçüldü):
   açık problem artık yalnız KALİTE/bit — IQ3 sınıfı kalite (kitaplık/süperblok) + düzlem-sınıfı yerleşimi
   birleştiren format tasarımı. E13'ün LUT3 ölçümü (835 Gw/s > 571 sınır) bunun ALU tarafında da mümkün
   olduğunu söylüyor. Ayrı araştırma kalemi olarak dosyalandı.
+
+## 19. E22: GPU sayaçları (Xcode Metal Debugger) — "sabit 8 sütun işi" doğrulandı, "hesap tavanına dayanıyor" doğrulanmadı
+
+xctrace yolu (bölüm 7, `raw_results/07_xctrace_notes.txt`) sayaç vermemişti. Xcode 26.6 Metal Debugger yolu çalıştı.
+
+Yöntem:
+- Tek işlemlik GPU yakalaması: `METAL_CAPTURE_ENABLED=1 GGML_METAL_CAPTURE_COMPUTE=5 GGML_METAL_CAPTURE_DIR=<dizin> GGML_METAL_SB=1 test-backend-ops perf -o MUL_MAT -b MTL0 -p "type_a=q4_0,type_b=f32,m=M,n=N,k=K,"`
+- `llama_patch/e22_capture.diff`: yakalama dizinini ortam değişkeninden alır (varsayılan /tmp) ve test-backend-ops'a Qwen2.5-7B boyutlarını (18944x3584, 3584x18944) ekler.
+- Sayaç: Xcode'da .gputrace aç, Performance, Counters, Encoders, CSV dışa aktar (elle). n8'de profil ayarı varsayılan (Medium, Overlapping); n4'te ayar kaydı yok.
+- Ham veri: `raw_results/gpu_sayac/`. Yakalama dosyaları (~33 MB her biri) repoda yok.
+- Her komut kuyruğunun maliyeti tamamen `kernel_mul_mm_sb_q4_0_f32_tm2`; çağrı başına `dispatchThreadgroups {64,1,1}` (4096 satır, 64 satır/grup). Sayılar başka işle karışmıyor.
+
+İşlem başına süre (us, test-backend-ops perf, q4_0):
+
+| boyut (m x k) | n=1 | n=2 | n=3 | n=4 | n=8 |
+|---|---|---|---|---|---|
+| 4096 x 14336 | 141 | 152 | 240 | 397 | 388 |
+| 18944 x 3584 | - | - | - | 301 | 309 |
+| 3584 x 18944 | - | - | - | 435 | 461 |
+
+Sayaçlar, 4096 x 14336 (n4 iki kuyruk, n8 iki kuyruk):
+
+| sayaç | B=4 | B=8 |
+|---|---|---|
+| parçacık başına ALU komutu | 93 740 (iki kuyrukta da) | 93 740 (iki kuyrukta da) |
+| komut karışımı float / half / tamsayı-koşul | %66.9 / %7.7 / %21.6 | aynı |
+| ALU kullanımı | %41.6 | %41.2-41.6 |
+| F32 sınırlayıcı / kullanım | %67.9 / %55.7 | %66.7-67.5 / %55.2-55.6 |
+| komut hacmi sınırlayıcı | %64.4-64.7 | %64.9-65.5 |
+| doluluk (Kernel Occupancy) | %14.5-14.6 | %14.8-15.0 |
+| cihaz belleği bandı | 74.5-75.8 GB/s | 76.0-76.5 GB/s |
+| son seviye önbellek / L1 / başlatma sınırlayıcı | %11 / %14 / %0.02 | %14-16 / %16-17 / %0.02 |
+
+Bulgular:
+- Sabit iş doğrulandı: B=4 ve B=8'de parçacık başına komut sayısı ve karışımı birebir aynı. Çekirdek B'den bağımsız aynı işi yapıyor, B=4'te sütunların yarısı boşa.
+- Bellek ve başlatma elendi: bant tavanın (~258 GB/s) ~%29'u; önbellek ve başlatma sınırlayıcıları %0-16.
+- "Hesap tavanında" doğrulanmadı: hiçbir birim sınırda değil; ALU %42, en yüksek sınırlayıcı F32 %68. Bölüm 17'deki "tepenin %52'si" hesabı F32 kullanımıyla (%56) uyumlu, ama bu "hesap sınırlı" demek için yetmez.
+- ALU %100'e çıkabilseydi işlem ~165 us olurdu (397 us x 0.416; tahmin, ölçüm değil). Bu B=1'in 141 us'sine yakın.
+- Doluluk %14.5: 64 grup x 128 parçacık = 8192 parçacık, 16 çekirdeği doldurmuyor (hesap; ~3072 parçacık/çekirdek varsayımıyla %16.7).
+- Aynı ağırlık sayısı (m x k eşit), farklı süre: 18944x3584'te 301 us (296 grup), 3584x18944'te 435 us (56 grup). Paralellik süreyi etkiliyor. Ters veri: bölüm 17'de tm1 u4 (iki kat grup, 4'lü açma) %0-4 kazandırdı. Çelişki çözülmedi. Bu iki boyut için sayaç alınmadı, yalnız süre ölçüldü.
+
+Bölüm 17'ye düzeltme: "35 ms duvarı yapısal donanım kısıtı" hükmünün "sabit 8 sütun işi" yarısı sayaçla doğrulandı. "Bu iş tepeyi doldurduğu için duvar" yarısı doğrulanmadı: çekirdek ALU'nun %42'sinde. Duvar donanım kısıtı olarak kapatılamaz; "çekirdek tasarımı ve paralellik" olarak açık.
+
+Açık işler:
+- `up_n4` / `down_n4` sayaçları (doluluk ve ALU kullanımı gerçek boyutta nasıl).
+- B=1 kontrol sayacı (`n1_sb1`).
+- Bölüm 5'teki split-K (E7): paralellik hipotezini doğrudan sınar.

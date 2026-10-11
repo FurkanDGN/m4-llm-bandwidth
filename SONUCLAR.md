@@ -293,7 +293,7 @@ Projeksiyon iyimserdi (k=2 için B=3 maliyeti 1.09x varsayılmıştı, gerçek 1
 
 ## 12. GPU sayaçları (xctrace)
 
-Durum: ölçen=[A]; tekrar=3 deneme; doğrulama=yok; sonuç=**sayaç yakalanamadı**. Detay: `raw_results/07_xctrace_notes.txt`. "Metal GPU Counters" (varsayılan "Performance Limiters"): "Selected counter profile is not supported on target device"; "Metal System Trace" ve "Game Performance" yalnız zaman çizelgesi verdi. ALU limiter / bellek limiter / occupancy değerleri YOK. Çıkarımlar (sayaç değil, değişken-çıkarma): xorshift türetme hesap sınırlı, E ve B=1 q4 okuma bellek sınırlı, rastgele üretim hesap sınırlı.
+Durum: ölçen=[A]; tekrar=3 deneme; doğrulama=yok; sonuç=**sayaç yakalanamadı**. Detay: `raw_results/07_xctrace_notes.txt`. "Metal GPU Counters" (varsayılan "Performance Limiters"): "Selected counter profile is not supported on target device"; "Metal System Trace" ve "Game Performance" yalnız zaman çizelgesi verdi. ALU limiter / bellek limiter / occupancy değerleri YOK. Çıkarımlar (sayaç değil, değişken-çıkarma): xorshift türetme hesap sınırlı, E ve B=1 q4 okuma bellek sınırlı, rastgele üretim hesap sınırlı. Sonradan Xcode Metal Debugger ile sayaç alındı (B=4/B=8 yamalı çarpma çekirdeği): `main_session/TUR1-DOGRULAMA.md` bölüm 19.
 
 ## 13. Bende bulunmayan ölçümler
 

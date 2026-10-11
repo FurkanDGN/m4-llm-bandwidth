@@ -152,4 +152,4 @@ Dosyalar: `ggml-metal.metal`, `ggml-metal-device.cpp/.h`, `ggml-metal-ops.cpp`. 
 - Dönüşüm/FMA bütçesi: q4 B=2-3 için ağırlık başına ~7 yuva "bedava" (bellek süresi 2.28 ps/ağırlık × 3.07 T/s). Dönüşüm + B FMA bunu aşıyor mu? Hangi işlem sayısı azaltılabilir (ofset ertelemesi işe yaramadı; LUT yaramadı; half birikim +%4)?
 - x'i simdgroup başına threadgroup belleğinde paylaşmak, ağırlığı yeniden paketlemek (q4_0 → nibble çifti düzeni, yükleme sırasında bir kez), B=9-16 için daha ucuz MMA (mevcut 3.1x vs llama.cpp 5.1x).
 - Spekülatif tarafında taslak maliyeti (token başına 3.4-4.2 ms, 0.5B bağımsız 3.16 ms) ve yield; kısa taslaklı lookup.
-- Sayaçlar: `Metal GPU Counters` profili hatası ("not supported on target device") neden? Başka profil/şablon var mı?
+- Sayaçlar: xctrace yolu çalışmadı ("not supported on target device"); Xcode Metal Debugger ile .gputrace yolu çalışıyor, sonuç `main_session/TUR1-DOGRULAMA.md` bölüm 19.
