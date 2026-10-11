@@ -460,5 +460,10 @@ Bölüm 17'ye düzeltme: "35 ms duvarı yapısal donanım kısıtı" hükmü gat
 
 Açık işler:
 - Down, q ve o için daha küçük satır dilimi (tm1) ya da split-K (bölüm 5, E7): yalnız bu boyutlarda uçtan uca ölçülmedi, kazanç tahmini ~%10.
+  KARAR (11 Eki akşam): şimdilik girilmiyor. Gate/up zaten F32 sınırında (%85); ~%10 uçtan uca
+  kazanç 35 ms'yi ancak ~31 ms'ye indirir, 17.5 ms tabanına yetmez, k=3-5 spec yine ölü.
+  Sınırlı-kazançlı kalem olarak açık duruyor. (tm1'in tek başına çare olmadığı bölüm 17'deki
+  %0-4 sonucuyla tutarlı: tm1 grup sayısını artırıyor ama toplam parçacığı artırmıyor;
+  sayaçların gösterdiği belirleyici toplam parçacık.)
 - F32 sınırlayıcı %85'in ötesine geçmeyi engelleyen neden bilinmiyor (MMA, half ve tamsayı komutları aynı hattı paylaşıyor olabilir; ölçülmedi).
 - B=1 kontrol sayacı (`n1_sb1`) alınmadı, gerekmedi.
