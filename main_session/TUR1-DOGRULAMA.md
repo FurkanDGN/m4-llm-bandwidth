@@ -296,3 +296,50 @@ Sonuç ve açık uç:
   ve bulutun hesap-sınırlılık okuması. Ders: ölçmeden kernel teşhisi koymak iki kez üst üste yanılttı;
   "değişken başına tek varyant + aynı zincirde baz" düzeni olmasa bu beş yanlış yol fark edilmeden
   birikebilirdi.
+
+## 18. E20: IQ4_XS kernel'inde iki nötr probe — NR0 kazanımından ötesi bu yapıda yok
+
+Düzeltilmiş muhasebe: bartowski 1.5B IQ4_XS tied-embedding (okunan = dosya 0.911 GB) → 171.6 tok/s =
+5.83 ms − 1.63 sabit = 4.20 ms → 217 GB/s = tavanın ~%87'si. Tavan senaryosu ~190 tok/s (+%10 pay var).
+
+| probe | sonuç (tg128, 5 tekrar, q4_0 kontrollü) | hüküm |
+|---|---|---|
+| NSG 2→4 | 171.48 ± 0.27 (baz 171.6; kontrol 185.3/186.3) | etkisiz |
+| q4 çift 4B yükü → tek uint2 | 172.06 ± 0.09 | gürültü; GERİ ALINDI (E4/E5 kuralı) |
+
+Kernel'in yük deseni zaten düzgün (coalesced qs, satırlara amortize y, tg-tablo). Kalan ~%13'ün tek
+değişkenli ucuz kaldıracı kalmadı; E7 dersiyle (üst üste çürüyen kernel tahminleri) buradaki kazı
+durduruldu. IQ4_XS son durumu: NR0=8 ile 171.6 tok/s, 1.5B tavsiyesi değişmedi.
+
+## 19. E21: 3.5 bpw düzlem formatı mat-vec'te TAVANDA — hızlı 3-bit'in yapıcı kanıtı
+
+Mikro: micro/mv3p.metal + mv3p.swift (16384×16384, SoA: 2-bit düzlem + 1-bit düzlem + blok-32 fp16 ölçek
+= 3.5 bpw; E13'ün T3 sihirli açması; CPU çift-duyarlık doğrulaması 2 satır, göreli fark ≤1e-6; 600 ms
+ısınma, 7 tekrar medyanı):
+
+| kernel | bpw | medyan | etkin bant | ağırlık hızı |
+|---|---|---|---|---|
+| mv3p (düzlem 3-bit) | 3.5 | 0.471 ms | 249.6 GB/s (tavanın %96'sı) | 570.5 Gw/s |
+| mv4m (q4_0 eşdeğeri referans) | 4.5 | 0.586 ms | 257.7 GB/s | 458.1 Gw/s |
+
+- E13'ün öngörüsü (açma ALU'su 883 Gw/s > 3.5bpw bellek sınırı 571) uçtan uca mikroda DOĞRULANDI —
+  günün kernel tahminleri içinde ilk tutan. Alt-4-bit yavaşlığının kernel-yapısal olduğu artık yapıcı
+  kanıtla kapalı: tavanda akan bir 3.5 bpw düzeni mevcut ve pakette.
+- Projeksiyon (sabit masraf modeliyle): 1.5B @3.5bpw ≈ 216 tok/s (IQ4_XS 171.6), 7B ≈ 71.5 tok/s düz
+  decode (q4_0 56.6). KALİTE AÇIK SORU: bu basit (doğrusal, blok-32) 3-bit şema; IQ3 sınıfının kalite
+  avantajı kitaplık/süperblok yapısından geliyor. Gerçek kazanım ancak kalite ölçümüyle hak edilir.
+- Pratik yollar: (a) llama.cpp'ye yeni GGUF tipi (büyük iş; upstream yolu kapalı olduğundan yerel kalır),
+  (b) MLX'in hazır 3-bit affine formatı (E21 ekinde hız ölçümü).
+
+### E21 eki: MLX 3-bit — hız ikinci kanıt, kalite çöküşü
+
+mlx_lm convert ile Qwen2.5-1.5B → 3-bit grup-64 (3.501 bpw ölçüldü):
+
+- Hız: 242.3 tok/s (4.13 ms/token ≈ 0.72 GB / ~250 GB/s + ~0.9 ms çerçeve) — MLX'in hazır 3-bit kernel'i
+  de bant hızında. Kıyas: MLX 4-bit 216.9, llama.cpp q4_0 185.7, IQ4_XS 171.6, Q3_K_S 112.
+- Kalite: TEK ÖRNEKTE ÇÖKÜŞ — esse istemine 25 token'lık alakasız ret cevabı verip durdu (greedy;
+  PPL ölçülmedi). Basit doğrusal 3.5 bpw şemanın q2_K emsali gibi modeli bozduğu yönünde güçlü işaret.
+- E21 hükmü: hız sorusu YAPICI KAPALI (iki bağımsız kanıt: bizim mikro 249.6 GB/s + MLX uçtan uca 242 tok/s);
+  açık problem artık yalnız KALİTE/bit — IQ3 sınıfı kalite (kitaplık/süperblok) + düzlem-sınıfı yerleşimi
+  birleştiren format tasarımı. E13'ün LUT3 ölçümü (835 Gw/s > 571 sınır) bunun ALU tarafında da mümkün
+  olduğunu söylüyor. Ayrı araştırma kalemi olarak dosyalandı.
