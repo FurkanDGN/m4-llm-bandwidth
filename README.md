@@ -11,7 +11,7 @@ Apple M4 Pro (24 GB, 273 GB/s) üzerinde, llama.cpp/Metal ile LLM decode hızın
 
 ## Önemli uyarı
 
-Ölçümlerin çoğu tek deneycinin tek koşuluk sonuçlarıdır ve bağımsız tekrar yapılmamıştır; SONUCLAR.md'de her tablonun başında kaynak/tekrar/doğrulama etiketi vardır. Doğrulanmamış iddia olarak okuyun.
+Ölçümlerin çoğu tek deneycinin tek koşuluk sonuçlarıdır; SONUCLAR.md'de her tablonun başında kaynak/tekrar/doğrulama etiketi vardır. İlk bağımsız tekrar yapıldı (`main_session/TUR1-DOGRULAMA.md`): 6 kritik hücrenin 5'i doğrulandı (manşet dahil), 1'i düzeltildi; yamanın çıktı doğruluğu kanıtlandı (ΔPPL ≤ 0.0005, greedy çıktılar bayt bayt aynı). Tekrarlanmamış tabloları hâlâ iddia olarak okuyun.
 
 ## Yapı
 
@@ -21,7 +21,7 @@ Apple M4 Pro (24 GB, 273 GB/s) üzerinde, llama.cpp/Metal ile LLM decode hızın
 - `metal/` — Metal kernel'leri ve Swift ölçüm programları (mikro-ölçümler, dönüşüm, toplu mat-mat)
 - `llama_patch/` — llama.cpp Metal arka ucu küçük-batch yaması (.diff + uygulayıcı)
 - `scripts/` — istem üreticileri, tarama betikleri, ölçüm zincirleri
-- `main_session/` — zip/entropi/CPU açma ölçümleri (script + sonuç)
+- `main_session/` — zip/entropi/CPU açma ölçümleri (script + sonuç); `TUR1-DOGRULAMA.md` — bağımsız tekrar + yama doğruluk kanıtı + düzeltilmiş sabit-masraf modeli
 - `raw_results/` — ham çıktılar
 
 Tüm Metal/Swift dosyaları derleme kontrolünden geçmiştir; ölçüm programları `swiftc` ile derlenip kernel dosyası argümanıyla çalıştırılır (ayrıntı KNOWHOW.md'de).
