@@ -325,13 +325,36 @@ damgası + test-backend-ops 3/3 + 7B q4_0 kontrolü (tg128, 5 tekrar):
 | 8 (geri alım doğrulama) | 51.94 ± 0.05 | %89.7 | 57.01 ± 0.04 |
 
 - Yama 7B'de de çalışıyor ama kazanç +%4.4 (1.5B'de +%38 idi): 7B'de kernel NR0=4 ile zaten
-  tabanın %86'sındaydı, amorti edilecek pay küçük. NR0 kazancı model küçüldükçe büyüyor
-  (satırlar kısaldıkça y-yükü amortismanı daha değerli).
+  tabanın %86'sındaydı, amorti edilecek pay küçük. (İlk yazımda "kazanç model küçüldükçe
+  büyüyor" demiştim; ek-2'deki Gemma ölçümü bunu ÇÜRÜTTÜ — belirleyici olan boyut değil,
+  bazın tabana uzaklığı.)
 - Pratik not: 7B'de IQ4_XS (52.1) q4_0'dan (57.0) YAVAŞ, dosya ise neredeyse aynı boyutta
   (3.92 vs 3.99 GiB; bartowski output'u Q6_K tuttuğu için bit tasarrufu erimiş). 7B'de hız
   için q4_0, kalite için IQ4_XS; 1.5B'deki tablonun aynısı.
 
-## 19. E21: 3.5 bpw düzlem formatı mat-vec'te TAVANDA — hızlı 3-bit'in yapıcı kanıtı
+### E20 eki-2: Aynı A/B Gemma-3'te — kazanç boyutla değil, bazın tabana uzaklığıyla ölçekleniyor
+
+Bartowski Gemma-3 1B ve 4B IQ4_XS (ikisi de tied; 1B: toplam 0.708 GB, token_embd Q8_0 0.321 GB
+→ taban 224.8 tok/s; 4B: toplam 2.257 GB, token_embd Q6_K 0.551 GB → taban 94.1 tok/s). Tied
+olduğu için gömme tablosu her token okunuyor ve Q8_0/Q6_K kernel'inden geçiyor — bayt payı
+%45/%24, yani IQ4_XS yamasının etki alanı dışında (seyreltme). Aynı zincir düzeni, kontrol
+Qwen 1.5B q4_0 (185.1-185.4 üç koşuda sabit):
+
+| N_R0_IQ4_XS | Gemma 1B tok/s | Gemma 4B tok/s |
+|---|---|---|
+| 8 (yama) | 182.57 ± 1.13 | 78.92 ± 0.05 |
+| 4 (upstream) | 186.95 ± 0.26 | 77.66 ± 0.05 |
+| 8 (geri alım doğrulama) | 183.53 ± 0.37 | 78.92 ± 0.07 |
+
+- Gemma 4B: yama +%1.6. Gemma 1B: yama −%2.3 (İLK NEGATİF ÖRNEK — gürültü dışı, iki koşuda
+  tekrarlanabilir). Dört modelin tablosu: Qwen 1.5B +%38, Qwen 7B +%4.4, Gemma 4B +%1.6,
+  Gemma 1B −%2.3.
+- Desen boyut değil: NR0=4 bazı tabandan ne kadar uzaksa yama o kadar kazandırıyor (Qwen 1.5B
+  bazı %63'teydi → büyük kazanç; Gemma'lar %82-83'te → pay yok). Gemma 1B'deki küçük zararın
+  muhtemel mekanizması satır sayısı azken NR0=8'in threadgroup sayısını yarılaması (occupancy);
+  ölçülmedi, hipotez olarak not.
+- Varsayılan karar: N_R0_IQ4_XS=8 KALIYOR (+%38'lik kazanım −%2.3'lük zarara ağır basar);
+  Gemma-1B sınıfı model ana yük olursa 4'e döndürülebilir. 3.5 bpw düzlem formatı mat-vec'te TAVANDA — hızlı 3-bit'in yapıcı kanıtı
 
 Mikro: micro/mv3p.metal + mv3p.swift (16384×16384, SoA: 2-bit düzlem + 1-bit düzlem + blok-32 fp16 ölçek
 = 3.5 bpw; E13'ün T3 sihirli açması; CPU çift-duyarlık doğrulaması 2 satır, göreli fark ≤1e-6; 600 ms
