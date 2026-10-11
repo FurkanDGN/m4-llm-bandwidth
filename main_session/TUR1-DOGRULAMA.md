@@ -199,3 +199,100 @@ Bağımsız bant ölçeri (micro/band.metal: r4=eski 4-akış deseni, r8=8 uçu�
 Q6_K ve Q8_0'da NR0 2→4: Q8_0 121.5 (taban 122.5), 7B q4_0 53.5 (taban 54.8) — ikisi de gürültü payında, kazanç yok.
 Tutarlı açıklama: NR0/occupancy kolu yalnız bellek tavanından uzak kernel'lerde (IQ4_XS, Q2_K, Q3_K; %40-75 bölgesi)
 çalışıyor; zaten %96-99'da koşan q4_0/q8_0'da kazanılacak yer yok. İkisi de 2'ye geri alındı; nr0_tune.diff değişmedi.
+
+## 15. E7 faz 1-4: B=2-8 MMA kernel'i gecikme-zinciri sınırlı (üç tahmin çöktü, teşhis netleşti)
+
+Ölçüm düzeni: llama-batched-bench, 7B oq4 (lm_head q4_0), npl=B, grup maliyeti = B×1000/S_TG ms.
+Taban hesap (roofline, okunan 3.98 GB): B≤6 için 17.5 ms (1.00x), B=8 için 20.2 ms (1.15x).
+
+Faz 1 (mod kıyası, tek koşu):
+
+| B | SB=1 (ms) | tek tokene oran | SB=m MMA (ms) | skaler (ms) |
+|---|---|---|---|---|
+| 2 | 18.9 | 1.07x | 34.7 | 18.9 |
+| 3 | 24.2 | 1.37x | 35.2 | 24.2-28.0 |
+| 4 | 34.7 | 1.96x | 35.7 | — |
+| 8 | 36.3 | 2.05x | — | — |
+
+- MMA kernel'i B=2'de bile ~35 ms: maliyet B'den bağımsız DÜZ → hesap sınırlı değil (hesap B ile büyürdü).
+  Etkin okuma ~117 GB/s (tavanın %45'i).
+- Skaler yol B=2'de tabanda (1.07x) — bulutun B=2 öngörüsü doğrulandı.
+
+Denenen dört varyant (hepsi doğruluk kapısından geçti: test-backend-ops 3/3) ve sonuçları, aynı zincirde v1 önce:
+
+| varyant | değişiklik | B=2-8 grup maliyeti | hüküm |
+|---|---|---|---|
+| v1 tm2 (mevcut) | — | 33.6-36.4 ms | baz |
+| skaler n4-n8 | şablonu 4-8 sütuna genişlet | 40.7-297 ms | ÇÖP: x yükleri sütunla doğrusal + yazmaç baskısı (n8'de ~90 float/thread) |
+| v2 (tg-stage) | x'i threadgroup belleğine ortak yükle (blok başına 2 bariyer) | 76.9-80.5 ms | ÇÖP: bariyer 4 simdgroup'u kilit adıma sokuyor |
+| v3 (geniş qs) | dağınık 2B qs yükleri → tek uint4 | 70.4-74.1 ms | ÇÖP: geniş yük zincir gecikmesini uzatıyor |
+| v4 (v3+shuffle x) | x'i simd_shuffle ile dağıt | 166-283 ms | ÇÖP: shuffle'lar zincire seri ALU gecikmesi ekliyor |
+| v1/v2 tm4 | simdgroup başına 4 tile | 77-138 ms | ÇÖP: yazmaç → occupancy |
+
+Teşhis (tüm veriyle tutarlı tek açıklama): kernel GECİKME-ZİNCİRİ sınırlı. Blok döngüsünün her adımı
+yük→aç→MMA bağımlılık zinciri; maliyet B'den bağımsız, zinciri uzatan her değişiklik (geniş yük, shuffle,
+bariyer, yazmaç baskısı) doğrudan zarar. Kaba hesap: ~24 yerleşik simdgroup × iterasyon başına 288 B /
+~600 çevrim ≈ tam ölçülen banda denk — sınır tam bu dengede.
+
+Tahmin karnesi (dürüst): v2 için "yük komutu azalır, hızlanır" ve v3 için "2B dağınık okumalar birleşir,
+~20-24 ms'ye iner" tahminlerinin İKİSİ DE ters yönde çöktü. Önden doğru çıkanlar: B=2 tabanda, B=4-8'de
+~1.8x açık var, suçlu ALU değil. Ders: gecikme-sınırlı rejimde "daha az/daha geniş yük" sezgisi ters çalışır;
+doğru kaldıraç uçuştaki bağımsız yük sayısını artırmak.
+
+Sıradaki aday (v5, henüz koşulmadı): blok döngüsünü 2'li aç, iki bloğun tüm yüklerini hesaptan önce birlikte
+ihraç et (yazılım boru hattı). Beklenti kayıtta: zincir başına bayt 2x → 35 ms'nin 24-28 bölgesine inmesi.
+
+## 16. E19: MLX kıyası — "hazır çözüm var mı" denetimi (tek koşu + kısmi tekrar)
+
+mlx-lm 0.32, mlx-community Qwen2.5 4bit (7B + 0.5B taslak; 4.5 bpw, q4_0 ile aynı bayt sınıfı), aynı
+istemler (mk_prompts.py, seed 7), greedy. Kıyas: yamalı llama.cpp + oq4.
+
+| iş | MLX | yamalı llama.cpp | kazanan |
+|---|---|---|---|
+| 7B düz decode (esse) | 58.9 (2 koşu: 58.9/58.9) | 56.6 | MLX +%4 (çerçeve ek yükü farkı) |
+| spec esse k=1 | 75.2 | 68.5 | MLX +%10 |
+| spec esse k=2 | 71.5 (tekrar 71.2) | 65.4 | MLX |
+| spec esse k=3 / k=5 | 59.2 / 42.6 | — | kimse (ikisi de çöküyor) |
+| JSON kopya (spec k=2-8) | 85.8-90.4 | lookup k=7: 106.6 | llama.cpp lookup |
+| kod düzenleme | (lookup yok) | lookup k=7: 127.7 | llama.cpp lookup |
+
+- Spec VERİMİ iki çerçevede aynı (k=1 kazancı: MLX 1.28x, biz 1.25x — kendi tabanlarına göre). MLX'in
+  mutlak üstünlüğü tabanından geliyor: token başına ~0.65 ms daha az çerçeve masrafı (E17 ile tutarlı).
+- B=4-8 klifi MLX'te de ÇÖZÜLMEMİŞ: k≥3 kazandırmıyor. E7'nin alanı hâlâ kimsenin çözmediği yer.
+- Pratik tavsiye güncellendi: serbest metin sohbet + spec için bugün en iyi araç MLX (75 tok/s);
+  kod/JSON/belge düzenleme için yamalı llama.cpp lookup (106-128 tok/s) rakipsiz.
+- Sınırlar: MLX çıktıları quant farkı yüzünden bayt-eş değil (araç-düzeyi uçtan uca kıyas); esse k=1
+  MLX'te tek koşu.
+
+## 17. E7 kapanışı: 35 ms duvarı gecikme değil, SABİT MMA SAYISI (teşhis düzeltildi, beş çürütme ile)
+
+Faz 5 (v5 = yazılım boru hattı, blok döngüsü 2'li/4'lü açık, yükler hesaptan önce; aynı zincirde v1 önce):
+
+| varyant | B=2 | B=4 | B=8 (ms) |
+|---|---|---|---|
+| v1 tm2 | 33.7 | 34.7 | 36.3 |
+| v5 u2 | 34.0 | 34.5 | 36.0 |
+| v5 u4 | 37.7 | 38.5 | 39.9 |
+| v5 tm1 u4 | 33.7 | 34.0 | 34.9 |
+
+v5 ETKİSİZ (±%1-4) — boru hattı tahmini de çöktü (24-28 beklenmişti). Bu, bölüm 15'teki "gecikme-zinciri"
+teşhisini de ÇÜRÜTÜYOR: gecikme sınırı olsaydı uçuştaki yükleri ikiye katlamak kazandırırdı.
+
+Tüm veriyle tutarlı kalan tek açıklama (bulutun D bulgusunun geç teyidi): kernel HESAP sınırlı, ama B'deki
+düzlüğün sebebi şu — MMA yolu B kaç olursa olsun TAM 8 SÜTUN hesaplıyor; adım başına MMA sayısı sabit
+(~110M MMA = 113 GFLOP, 35 ms'de ≈ 3.2 TFLOPS ≈ tepenin %52'si; kalan pay dequant + yük komutlarının aynı
+boru hattını paylaşması). Beş çürütme bununla tutarlı: yük azaltma/genişletme (v3), shuffle (v4), boru hattı
+(v5) MMA sayısını değiştirmiyor → etkisiz ya da zararlı; bariyer (v2) ve yazmaç baskısı (tm4, skaler n4-8)
+ek fren → zararlı.
+
+Sonuç ve açık uç:
+- B=2-3: skaler yol tabanda/yakınında (18.9 / 24 ms) — çözülmüş.
+- B=4-8: 35 ms duvarı YAPISAL — donanımda 4-sütun simdgroup matrisi yok, 8 sütunun yarısı B=4'te boşa.
+  Skaler yol da x-yük deseni + yazmaç duvarı yüzünden oraya inemiyor (faz 2). Beş yeniden-yapılandırma
+  denendi, beşi de tek ikilide env ile açılabilir durumda ağaçta duruyor (GGML_METAL_SB_V=2..5, SB_NSC).
+- Varsayılan davranış DEĞİŞMEDİ (NSC=3, v1): E7 hız değil mekanizma getirdi. B=4-8'i tabana indirme işi
+  "yarım kalmış kernel" değil "format/donanım kısıtı" dosyasına taşındı.
+- Tahmin karnesi: 5 müdahale tahmini çöktü; önden doğru çıkanlar roofline (B=2 tabanda, B=8 tavan 1.15x)
+  ve bulutun hesap-sınırlılık okuması. Ders: ölçmeden kernel teşhisi koymak iki kez üst üste yanılttı;
+  "değişken başına tek varyant + aynı zincirde baz" düzeni olmasa bu beş yanlış yol fark edilmeden
+  birikebilirdi.
