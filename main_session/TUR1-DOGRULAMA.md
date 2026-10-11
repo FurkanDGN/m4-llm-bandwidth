@@ -136,3 +136,26 @@ Mikro (2^29 ağırlık, 8192², ms; MODE 0=düz çapa, 4=ggml-18B yama deseni, 5
 - UYGULAMA DENEMESİ (negatif sonuç): MODE 5 eşlemesi gerçek yamaya işlendi, doğruluk geçti, çıktı birebir aynı;
   ama uçtan uca spekülatif k=1 +%1.2 / k=2 −%1.2 — kazanç yok. Mikrodaki fark DRAM rejimine ve per-op şekline özgü
   (per-op 33 MB SLC içinde). Yama orijinal hâline geri alındı. Ders: mikro kazancı uçtan uca ölçmeden yamaya taşıma.
+
+## 11. E15/E16/E13 + IQ kernel ameliyatı (serbest tur)
+
+E15 — çoklu istek (llama-batched-bench, 7B, npp=128 ntg=64):
+yamasız toplam decode DÜZ: 1 akış 54.4, 2/4/8 akış 51-52 tok/s (akış eklemek hiçbir şey kazandırmıyor);
+yamalı: 2 akış 93.5, 4 akış 96.4, 8 akış 153.8 tok/s toplam (3.0x). Çok-ajanlı/çok-kullanıcılı yerel servis için yamanın en büyük getirisi bu.
+
+E16 — KV derinliği (7B, -fa 1): d=0 54.3, d=4k 48.6 (−%10), d=16k 39.4 (−%27). SÜRPRİZ: q8_0 KV f16'dan YAVAŞ
+(4k 42.6, 16k 33.4) — bayt yarılanıyor ama attention'daki açma maliyeti kazancı yutuyor. "Bakımsız kernel" temasının üçüncü örneği.
+
+E13 mikro — saf açma ALU tavanları (32 ağırlık/iter, bellek okumasız, Gw/s):
+q4_0 sihirli 1368; IQ4_NL sözlük (threadgroup) 902, (constant dizi) 622; 3-bit düzlem-sihirli 883; bit-düzlemi LUT3 835.
+Bellek sınırları: IQ4_XS 478, 3.5bpw 581 Gw/s → tüm alt-4-bit açmaları bellek sınırının ÜSTÜNDE akabiliyor;
+yavaşlık matematik değil kernel yapısı [Ö].
+
+IQ kernel ameliyatı (uçtan uca hakemli):
+- Hipotez 1 (aux32/q8 byte-takma-adı yavaşlatıyor): ÖLDÜ — doğrudan-shift eşdeğeri ±0 (156 vs 157.5).
+- Hipotez 2 (N_R0 düşük, y yükleri az amortismanlı): TUTTU — üç tek satırlık sabit değişikliğiyle:
+  N_R0_IQ4_XS 2→8: IQ4_XS 157.5 → 171.6 tok/s (+%9, etkin 189→212 GB/s), PPL bire bir aynı (9.0771).
+  N_R0_Q2_K 4→8: Q2_K 143.2 → 156.7 (+%9.4). N_R0_Q3_K 2→8: Q3_K_S 104.4 → 112.3 (+%7.6), Q3_K_M nötr.
+  Geri tepenler: IQ3 ailesi 8'de −%5 (4'te kaldı), Q2_K=16 −%2, IQ4_XS=16 −%10, NR0 tatlı noktası format başına farklı — mikro-mimari görünmez olduğundan ancak ölçümle bulunuyor.
+- Değişiklik `llama_patch/nr0_tune.diff`te; test-backend-ops MUL_MAT tamamı OK.
+- Yeni resim: IQ4_XS 171.6 vs q4_0 183.3 — %16 küçük, PPL daha iyi (9.08<9.32), hız farkı %6.4'e indi.
