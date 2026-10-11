@@ -193,3 +193,9 @@ Bağımsız bant ölçeri (micro/band.metal: r4=eski 4-akış deseni, r8=8 uçu�
 - E2 uydurmasının eğimi (250.8) gerçek tavanın %96.5'i.
 - Isınmasız kısa ölçüm −%25'e kadar sapıyor (DVFS): bundan sonra her mutlak GB/s ölçümünde ≥500 ms ön ısıtma zorunlu;
   D2'nin ±%3-6 "program farkı" büyük ölçüde buydu.
+
+## 14. NR0 kalıbının sınırı: tavandaki formatlarda etkisiz
+
+Q6_K ve Q8_0'da NR0 2→4: Q8_0 121.5 (taban 122.5), 7B q4_0 53.5 (taban 54.8) — ikisi de gürültü payında, kazanç yok.
+Tutarlı açıklama: NR0/occupancy kolu yalnız bellek tavanından uzak kernel'lerde (IQ4_XS, Q2_K, Q3_K; %40-75 bölgesi)
+çalışıyor; zaten %96-99'da koşan q4_0/q8_0'da kazanılacak yer yok. İkisi de 2'ye geri alındı; nr0_tune.diff değişmedi.
