@@ -1,0 +1,95 @@
+KAYNAK: bu oturum (agent), brew llama.cpp build e475fa2b5 (9730), M4 Pro. Ham cikti, bagliamdan oldugu gibi aktarildi (dosyalar panikle kayboldu; yeniden olusturuldu).
+
+##### PPL zinciri (bq4qth7sl.output, ana oturum zinciri; ben yalniz okudum)
+=== PPL qwen2.5-1.5b-instruct-q8_0 ===
+0.20.938.489 I Final estimate: PPL = 9.8209 +/- 0.20171
+=== PPL qwen2.5-1.5b-instruct-q4_0 ===
+0.20.554.978 I Final estimate: PPL = 10.2914 +/- 0.21137
+=== PPL qwen2.5-1.5b-instruct-q3_k_m ===
+0.22.552.436 I Final estimate: PPL = 11.0236 +/- 0.22989
+=== PPL qwen2.5-1.5b-instruct-q2_k ===
+0.22.047.568 I Final estimate: PPL = 16.2623 +/- 0.34398
+=== PPL olmoe-1b-7b-0924-instruct-q4_0 ===
+0.19.059.627 I Final estimate: PPL = 11.9059 +/- 0.26635
+=== PPL qwen2.5-7b-instruct-q4_0-00001-of-00002 ===
+1.26.111.197 I Final estimate: PPL = 7.7653 +/- 0.16481
+BITTI
+
+##### llama-bench -p 1,2,4,8,16,32,64 -n 0 -r 5 (md)
+| qwen2 1.5B Q4_0 | 1011.16 MiB | 1.78 B | BLAS,MTL | 8 | pp1  | 172.93 +- 7.81 |
+| qwen2 1.5B Q4_0 | 1011.16 MiB | 1.78 B | BLAS,MTL | 8 | pp2  | 219.02 +- 1.20 |
+| qwen2 1.5B Q4_0 | 1011.16 MiB | 1.78 B | BLAS,MTL | 8 | pp4  | 262.18 +- 1.63 |
+| qwen2 1.5B Q4_0 | 1011.16 MiB | 1.78 B | BLAS,MTL | 8 | pp8  | 281.60 +- 1.35 |
+| qwen2 1.5B Q4_0 | 1011.16 MiB | 1.78 B | BLAS,MTL | 8 | pp16 | 603.31 +- 4.33 |
+| qwen2 1.5B Q4_0 | 1011.16 MiB | 1.78 B | BLAS,MTL | 8 | pp32 | 1203.52 +- 8.69 |
+| qwen2 1.5B Q4_0 | 1011.16 MiB | 1.78 B | BLAS,MTL | 8 | pp64 | 1682.03 +- 4.94 |
+| qwen2 7B Q4_0   | 4.12 GiB    | 7.62 B | BLAS,MTL | 8 | pp1  | 53.87 +- 0.58 |
+| qwen2 7B Q4_0   | 4.12 GiB    | 7.62 B | BLAS,MTL | 8 | pp2  | 56.82 +- 0.10 |
+| qwen2 7B Q4_0   | 4.12 GiB    | 7.62 B | BLAS,MTL | 8 | pp4  | 58.59 +- 0.14 |
+| qwen2 7B Q4_0   | 4.12 GiB    | 7.62 B | BLAS,MTL | 8 | pp8  | 58.68 +- 0.21 |
+| qwen2 7B Q4_0   | 4.12 GiB    | 7.62 B | BLAS,MTL | 8 | pp16 | 170.28 +- 0.52 |
+| qwen2 7B Q4_0   | 4.12 GiB    | 7.62 B | BLAS,MTL | 8 | pp32 | 346.05 +- 0.82 |
+| qwen2 7B Q4_0   | 4.12 GiB    | 7.62 B | BLAS,MTL | 8 | pp64 | 394.83 +- 0.98 |
+
+##### tg128 (-r 5)
+0.5B q4_0 (403.20 MiB, 630.17 M): 316.42 +- 1.81
+1.5B q4_0 (1011.16 MiB, 1.78 B): 179.53 +- 1.04
+7B   q4_0 (4.12 GiB, 7.62 B):   54.51 +- 0.02
+
+##### 0.5B pp egrisi (-r 5)
+pp1 275.58 +- 65.21 | pp2 482.61 +- 5.30 | pp4 694.32 +- 12.02 | pp8 826.62 +- 9.61 | pp16 1447.08 +- 16.42 | pp32 3010.32 +- 20.18 | pp64 4391.81 +- 103.85
+
+##### Ince egri (-p 1..16,24,32; -n 0; -r 3; csv avg_ts -> parti suresi ms = n/ts*1000; oran = n=1'e gore)
+0.5B:
+  n=  1   273.4 tok/s  batch=  3.7 ms =  1.00x
+  n=  2   515.7        3.9 ms = 1.06x
+  n=  3   606.5        4.9 ms = 1.35x
+  n=  4   680.5        5.9 ms = 1.61x
+  n=  5   696.4        7.2 ms = 1.96x
+  n=  6   762.8        7.9 ms = 2.15x
+  n=  7   762.5        9.2 ms = 2.51x
+  n=  8   835.3        9.6 ms = 2.62x
+  n=  9   855.3       10.5 ms = 2.88x
+  n= 10   940.9       10.6 ms = 2.91x
+  n= 12  1113.1       10.8 ms = 2.95x
+  n= 14  1280.9       10.9 ms = 2.99x
+  n= 16  1447.0       11.1 ms = 3.02x
+  n= 24  2321.2       10.3 ms = 2.83x
+  n= 32  2996.2       10.7 ms = 2.92x
+1.5B:
+  n=  1   168.9        5.9 ms = 1.00x
+  n=  2   222.4        9.0 ms = 1.52x
+  n=  3   247.3       12.1 ms = 2.05x
+  n=  4   262.6       15.2 ms = 2.57x
+  n=  5   254.3       19.7 ms = 3.32x
+  n=  6   276.4       21.7 ms = 3.67x
+  n=  7   260.6       26.9 ms = 4.54x
+  n=  8   283.3       28.2 ms = 4.77x
+  n=  9   344.1       26.2 ms = 4.42x
+  n= 10   383.9       26.0 ms = 4.40x
+  n= 12   459.9       26.1 ms = 4.41x
+  n= 14   537.2       26.1 ms = 4.40x
+  n= 16   605.7       26.4 ms = 4.46x
+  n= 24   907.5       26.4 ms = 4.47x
+  n= 32  1204.8       26.6 ms = 4.49x
+7B:
+  n=  1    54.9       18.2 ms = 1.00x
+  n=  2    57.1       35.0 ms = 1.92x
+  n=  3    59.5       50.4 ms = 2.77x
+  n=  4    58.5       68.3 ms = 3.75x
+  n=  5    49.1      101.9 ms = 5.59x
+  n=  6    61.6       97.4 ms = 5.34x
+  n=  7    54.9      127.5 ms = 7.00x
+  n=  8    58.8      136.1 ms = 7.47x
+  n=  9    97.0       92.8 ms = 5.09x
+  n= 10   107.9       92.7 ms = 5.09x
+  n= 12   129.4       92.7 ms = 5.09x
+  n= 14   149.8       93.5 ms = 5.13x
+  n= 16   170.4       93.9 ms = 5.15x
+  n= 24   260.1       92.3 ms = 5.06x
+  n= 32   346.9       92.2 ms = 5.06x
+
+##### Dogrusal uydurma (3 nokta; tg128 degerlerinden)
+0.5B 0.423 GB 3.16 ms/token (133.8 GB/s) ; 1.5B 1.060 GB 5.57 ms (190.4 GB/s) ; 7B 4.425 GB 18.35 ms (241.2 GB/s)
+1.5B ve 7B'den dogru: t = 1.54 ms + 3.80 ms/GB * boyut (bant tavani 263 GB/s). 0.5B tahmini 3.15 ms (317 tok/s), olculen 316 (3 nokta, tek dogrulama).
+0.5B dongu icinde (llama-lookup k=0, temp 0, -n 256, 3 tekrar): 300.4 / 300.2 / 302.9 tok/s ; llama-bench tg256 315.63 +- 0.95

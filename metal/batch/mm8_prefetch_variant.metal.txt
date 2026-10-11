@@ -1,0 +1,94 @@
+// Basarisiz deney (kernels10r): bir sonraki adimin sozcuk+olcek yuklerini onceden ver.
+// kernels14.metal'deki mm8 govdesinin yerine gecer (MODE 0/1/2 ve P ayni; MODE 3 yok). Sonuc: iyilesme yok, B=4..8'de daha kotu.
+template<uint B, uint R, uint MODE, uint P>
+kernel void mm8(device const uint *blk [[buffer(0)]],
+                device const half *scales [[buffer(1)]],
+                device const float4 *X [[buffer(2)]],
+                device float *y [[buffer(3)]],
+                constant MP &p [[buffer(4)]],
+                uint3 tg [[threadgroup_position_in_grid]],
+                uint sg [[simdgroup_index_in_threadgroup]],
+                uint lane [[thread_index_in_simdgroup]]) {
+    uint grow0 = tg.y * p.rows + (tg.x * SGS + sg) * R;
+    uint cols4 = p.cols >> 2;
+    uint nw = p.nblk * 4;
+    float acc[R][B];
+    for (uint r = 0; r < R; r++) for (uint c = 0; c < B; c++) acc[r][c] = 0.0f;
+    uint word[R];
+    half sch[R];
+    if (MODE != 2) {
+        for (uint r = 0; r < R; r++) {
+            uint gw = (grow0 + r) * nw + lane;
+            word[r] = blk[gw];
+            sch[r] = scales[gw >> 2];
+        }
+    }
+    for (uint wi = lane; wi < nw; wi += 32) {
+        uint wordn[R];
+        half schn[R];
+        if (MODE != 2) {
+            uint wn = wi + 32;
+            for (uint r = 0; r < R; r++) {
+                uint gw = (grow0 + r) * nw + min(wn, nw - 1);
+                wordn[r] = blk[gw];
+                schn[r] = scales[gw >> 2];
+            }
+        }
+        float4 xl[B], xh[B];
+        for (uint c = 0; c < B; c++) {
+            xl[c] = X[c * cols4 + wi * 2];
+            xh[c] = X[c * cols4 + wi * 2 + 1];
+        }
+        for (uint r = 0; r < R; r++) {
+            uint wd;
+            float sc;
+            if (MODE == 2) {
+                uint gw = (grow0 + r) * nw + wi;
+                uint s = (gw + p.seed) * 0x9E3779B1u;
+                s ^= s >> 15;
+                s |= 1u;
+                s = xs32(s);
+                wd = xs32(s);
+                sc = float(scales[gw >> 2]);
+            } else {
+                wd = word[r];
+                sc = float(sch[r]);
+            }
+            float2 f0, f1, f2, f3;
+            if (MODE == 1) {
+                uint s = ((wd & 0xFFFFu) + 1u) * 0x9E3779B1u;
+                s ^= s >> 15;
+                s |= 1u;
+                f0 = f1 = f2 = f3 = float2(0.0f);
+                for (uint pp = 0; pp < P; pp++) {
+                    s = xs32(s);
+                    float tm = float((wd >> (16 + 4 * pp)) & 15u) - 8.0f;
+                    f0 = fma(deq2(s, 0), float2(tm), f0);
+                    f1 = fma(deq2(s, 4), float2(tm), f1);
+                    f2 = fma(deq2(s, 8), float2(tm), f2);
+                    f3 = fma(deq2(s, 12), float2(tm), f3);
+                }
+            } else {
+                f0 = deq2(wd, 0); f1 = deq2(wd, 4); f2 = deq2(wd, 8); f3 = deq2(wd, 12);
+            }
+            f0 *= sc; f1 *= sc; f2 *= sc; f3 *= sc;
+            for (uint c = 0; c < B; c++) {
+                float a = acc[r][c];
+                a = fma(f0.x, xl[c].x, a); a = fma(f0.y, xl[c].y, a);
+                a = fma(f1.x, xl[c].z, a); a = fma(f1.y, xl[c].w, a);
+                a = fma(f2.x, xh[c].x, a); a = fma(f2.y, xh[c].y, a);
+                a = fma(f3.x, xh[c].z, a); a = fma(f3.y, xh[c].w, a);
+                acc[r][c] = a;
+            }
+        }
+        if (MODE != 2) {
+            for (uint r = 0; r < R; r++) { word[r] = wordn[r]; sch[r] = schn[r]; }
+        }
+    }
+    for (uint r = 0; r < R; r++) {
+        for (uint c = 0; c < B; c++) {
+            float t = simd_sum(acc[r][c]);
+            if (lane == 0) y[(grow0 + r) * B + c] = t;
+        }
+    }
+}

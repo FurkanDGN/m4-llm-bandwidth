@@ -1,0 +1,60 @@
+KAYNAK: bu oturum (agent), brew llama.cpp build e475fa2b5, M4 Pro, temp 0. Ham cikti bagliamdan aktarildi.
+
+##### 7B + 0.5B taslak, esse metni (raw istem), -n 256, bayrak: --spec-draft-n-max k ; eski --draft-max ile ayni sayilar (160 kabul, %41.237 tekrarlandi)
+k=4 tam cikti: encoded 20 tokens in 0.113 s ; decoded 258 tokens in 12.577 s (20.514 t/s) ; n_drafted 388 ; n_accept 160 ; accept 41.237%
+  common_perf_print: prompt eval time = 11082.80 ms / 505 tokens ; total time 13418.49 ms ; unaccounted 2297.65 ms (17.1%)
+
+Tarama (k, p-min): tok/s, tur basina dogrulama ms, tur basina token (yield), kabul
+7B esse   k=2 p0   : 34.0  tok/s  yield 2.19  dogr 55.2 ms  taslak(kalan) 9.2 ms   kabul %60
+7B esse   k=4 p0   : 20.5          2.63        112.2         16.6                    %41
+7B esse   k=8 p0   : 24.5          3.11        97.3          29.8                    %27
+7B esse   k=15 p0  : 20.6          3.15        99.5          53.3                    %14
+7B esse   k=31 p0  : 15.7          3.19        97.6          105.4                   %7
+7B esse   k=15 p0.5/0.8/0.9 ve k=31 p0.8/0.9: n_drafted ayni (1215 / 2480); p-min etkisiz (--no-spec-draft-backend-sampling ile de)
+7B kod    k=4  p0  : 37.0  tok/s  yield 4.84  dogr 112.2  taslak 18.6   kabul %97
+7B kod    k=15 p0  : 96.4          15.00       98.0       57.5           %97
+7B kod    k=31 p0  : 132.5         26.79       92.9       109.3          %90
+1.5B esse k=4 : 88.7 tok/s yield 3.45 dogr 24.2 taslak 14.7 kabul %62
+1.5B esse k=8 : 79.9          4.49       28.1        28.1        %44
+1.5B esse k=15: 63.0          4.98       28.6        50.5        %27
+1.5B esse k=31: 41.7          5.49       28.5        103.2       %15
+(1.5B baz decode ~173 tok/s ayni kosulda lookup k=0)
+
+##### 7B + 0.5B yield taramasi k=1..8 (esse, -n 256) [yamasiz]
+ k | tok/s | tok/tur | dogr ms/tur | taslak ms/tur | kabul
+ 1 | 37.8  | 1.68    | 38.9        | 5.4           | 68%
+ 2 | 34.1  | 2.19    | 54.8        | 9.3           | 60%
+ 3 | 27.1  | 2.41    | 76.3        | 12.9          | 47%
+ 4 | 20.5  | 2.63    | 111.5       | 16.7          | 41%
+ 5 | 21.8  | 2.77    | 107.0       | 20.3          | 36%
+ 6 | 17.6  | 2.90    | 141.0       | 24.1          | 32%
+ 7 | 16.5  | 2.97    | 152.0       | 27.4          | 28%
+ 8 | 24.4  | 3.11    | 96.9        | 30.5          | 27%
+
+##### llama-lookup (yamasiz), greedy. Is: JSON (1252 token istem, 18 kayit, status pending->done), -n 900
+1.5B baz (llama-completion eval): 168.34 tok/s ; llama-lookup k=0: 166.2
+1.5B k=3: 181.2 (accept %88.8) | k=8: 230.1 (%90.0) | k=15: 257.0 (%77.8) | k=31: 267.0 (%73.2)
+7B   k=0: 51.76 | k=3: 46.44 (%88.8) | k=8: 64.10 (%89.1) | k=15: 72.45 (%77.5) | k=31: 75.83 (%73.0)
+(cikti metni tabanla ayni; fark yalniz tabanin sonunda duran log satirlari)
+
+##### lookup matrisi (-n 600; k = 0/8/31)  [yamasiz]
+model is    k   tok  tok/s  taban  kat   drafted accept tur  tok/tur
+1.5b prose  0   332  173.5  173.5 1.00   0       -      332  1.00
+1.5b prose  8   334  251.5         1.45   312     86%    65   5.14
+1.5b prose  31  334  488.8         2.82   474     62%    41   8.15
+1.5b code   0   369  172.0  172.0 1.00
+1.5b code   8   369  260.1         1.51   360     87%    56   6.59
+1.5b code   31  369  529.6         3.08   589     58%    30   12.30
+1.5b essay  0   601  172.7  172.7 1.00
+1.5b essay  8   609  146.6         0.85   632     40%    356  1.71
+1.5b essay  31  623  162.6         0.94   1571    18%    343  1.82
+7b   prose  0   332  53.0   53.0  1.00
+7b   prose  8   334  76.2          1.44   312     87%    62   5.39
+7b   prose  31  334  159.3         3.00   474     62%    38   8.79
+7b   code   0   370  52.8   52.8  1.00
+7b   code   8   370  77.2          1.46   360     87%    57   6.49
+7b   code   31  370  167.2         3.17   589     58%    31   11.94
+7b   essay  0   601  52.5   52.5  1.00
+7b   essay  8   602  37.6          0.72   517     9%     558  1.08
+7b   essay  31  602  37.6          0.72   1953    2%     558  1.08
+Cikti ayniligi: 12 karsilastirmanin 11'inde taban metniyle ayni (prose'ta sonda fazladan <|endoftext|>); 1.5B esse (k=8,31) metni %80'inde ayrisiyor ("basic arithmetic operations" yerine "calculations") - farkli matris kernel'i/gruplama kaynakli kucuk sayi farki; 7B esse'de yalniz sonda fark.

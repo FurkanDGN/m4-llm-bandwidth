@@ -1,0 +1,112 @@
+KAYNAK: bu oturum (agent). llama.cpp yerel klon commit e475fa2b5 (build 9730), kendi derlemem (cmake -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON), M4 Pro. Yama: llama_patch/. Ham cikti bagliamdan aktarildi.
+Bagimsiz tekrar: YOK (tek makine, tek kisi). Tekrar sayilari her bolumde yazili.
+
+##### yamasiz YEREL derleme tabani (llama-bench -r 3; pp) ve tg128
+7B pp1 54.65 +- 0.34 | pp2 57.31 | pp3 59.34 | pp4 58.61 | pp5 48.89 | pp6 61.53 | pp7 54.78 | pp8 58.60 | pp9 97.03 | pp16 170.87
+tg128: 7B 53.58 +- 0.09 ; 1.5B 180.49 +- 3.00 ; 0.5B 341.38 +- 8.38   (brew ikilisi: 7B 54.51, 1.5B 179.53, 0.5B 316.42)
+
+##### Esik taramasi (yamasiz kod yolu, GGML_METAL_SB=0, GGML_METAL_MM_MIN=T: B<=T mat-vec(ext), B>T mat-mat; 7B parti ms; llama-bench -r 3; GURULTULU, tekrar 1 set)
+  B | T=8 | T=5 | T=4 | T=3 | T=2 | T=1
+  1 | 20.4 | 19.1 | 19.0 | 18.4 | 19.3 | 22.5
+  2 | 38.2 | 39.4 | 35.5 | 34.9 | 37.6 | 106.2
+  3 | 54.7 | 55.6 | 50.3 | 50.0 | 91.3 | 105.5
+  4 | 73.3 | 77.6 | 68.5 | 93.9 | 91.5 | 91.8
+  5 | 108.4 | 106.0 | 92.2 | 93.9 | 91.9 | 91.3
+  6 | 103.7 | 92.3 | 92.9 | 92.6 | 92.0 | 91.9
+  7 | 137.7 | 97.7 | 92.3 | 92.2 | 92.1 | 99.7
+  8 | 143.3 | 109.2 | 93.1 | 92.6 | 92.8 | 105.8
+  9 | 96.0 | 98.0 | 93.4 | 95.2 | 92.4 | 98.8
+ 12 | 94.3 | 95.2 | 109.7 | 97.3 | 102.2 | 97.0
+ 16 | 97.0 | 94.4 | 110.4 | 99.1 | 104.9 | 97.4
+Sonuc: kodda llama.cpp'nin kucuk-parti yolu ZATEN VAR (mul_mv_ext, ne11 2..8, nsg=2, r1ptg 2..5) ve DEVREDE; esik sabit ne11_mm_min=8. Esigi 4'e indirmek B=5..8'i 104-143 ms'den ~92-93 ms'ye ceker (mat-mat tabani 5x), B=1-4'e dokunmaz.
+
+##### Yamali mod karsilastirmasi (7B parti ms, B=1 yamasiz 18.6'a oran; llama-bench -r 3)
+  B | yamasiz | yamasiz T=4 | skaler2-3 + MMA tm2 | skaler2-3 + MMA tm1 | yalniz skaler 2-3 | MMA 2-8 tm2 | MMA 2-8 tm1
+  1 | 18.6 (1.00x) | 18.5 | 18.5 | 18.8 | 18.5 | 18.3 | 18.4
+  2 | 35.2 (1.90x) | 19.9 (1.07x) | 19.7 (1.06x) | 19.4 (1.04x) | 19.5 (1.05x) | 33.5 (1.80x) | 34.9 (1.88x)
+  3 | 50.7 (2.73x) | 28.9 (1.55x) | 28.8 (1.55x) | 28.8 (1.55x) | 29.0 (1.56x) | 33.8 (1.82x) | 35.1 (1.89x)
+  4 | 68.7 (3.69x) | 68.8 | 33.9 (1.82x) | 35.5 (1.91x) | 69.0 | 33.8 (1.82x) | 35.2 (1.89x)
+  5 | 102.3 (5.50x) | 91.9 (4.94x) | 34.0 (1.83x) | 35.6 (1.92x) | 102.3 | 34.1 (1.84x) | 35.6 (1.91x)
+  6 | 99.5 (5.35x) | 92.4 | 34.3 (1.85x) | 35.6 (1.92x) | 98.6 | 34.4 | 35.9
+  7 | 127.8 (6.87x) | 92.1 | 34.5 (1.86x) | 35.9 (1.93x) | 128.0 | 34.5 | 36.0
+  8 | 137.3 (7.39x) | 92.7 (4.99x) | 34.7 (1.87x) | 36.2 (1.95x) | 137.1 | 34.8 | 36.1
+  9 | 93.0 (5.00x) | 92.6 | 92.7 | 92.9 | 92.5 | 92.6 | 92.7
+ 12 | 93.7 | 93.1 | 93.3 | 93.0 | 93.5 | 93.4 | 93.6
+ 16 | 94.4 (5.07x) | 94.3 | 94.7 | 94.8 | 95.2 | 95.0 | 94.7
+
+##### Kernel bazli per-op (test-backend-ops perf; MUL_MAT q4_0, m=4096, k=14336, tek matris; us/op; B=1 134.6)
+yamasiz (SB=0):    n=2 294.8 | n=3 440.9
+yamali skaler R taramasi (SB=s, GGML_METAL_SB_R):
+ n | R=1   R=2   R=3   R=4   R=6   R=8
+ 1 | 134.9 134.9 134.4 133.6 134.8 133.8
+ 2 | 238.2 180.0 152.0 144.1 228.2 246.1
+ 3 | 415.3 284.7 211.9 236.4 309.2 330.2
+varsayilan (skaler R=4 B=2, R=3 B=3, MMA tm2 B>=4) tek kosuda: n=1 133.9 | n=2 142.9 | n=3 235.0 (R=4 iken) | n=4 325.9 | n=5 328.4 | n=8 346.3
+Sonuc: B=2 1.07x (bellek sinirli); B=3 R=3 ile 212 us (1.57x) - mikro-olcumdeki 1.09x'e ulasamadi (hesap yuvasi butcesi ~7/agirlik, B=3'te ~8); B>=4 MMA 2.4-2.6x (mikro-olcum 1.66x; tek matris, az threadgroup).
+
+##### ggml test-backend-ops (CPU referansiyla): "test -o MUL_MAT -b MTL0 -p type_a=q4_0" -> 3/3 backends passed, FAIL yok. n=2,3 (skaler) ve n=4..7 (MMA) dahil; yalniz m=16, k=256/1024 kucuk boyutlar. Gercek boyutlarda dogrulama = uctan uca greedy metin karsilastirmasi (YAPILMADI; bkz. SONUCLAR.md).
+
+##### Spekulatif 7B+0.5B, esse, temp 0, -n 256, --spec-draft-n-max k ; GGML_METAL_SB=0 (yamasiz) vs 1 (yamali)
+Ilk kosu (1 tekrar):
+ k | yamasiz tok/s (tok/tur, dogr ms) | yamali tok/s (tok/tur, dogr ms, taslak ms) | kazanc
+ 1 | 38.0 (1.68, 38.9) | 61.9 (1.68, 22.2, 4.9) | 1.63x
+ 2 | 34.4 (2.19, 55.1) | 52.3 (2.19, 33.5, 8.3) | 1.52x     <- B=3 skaler R=4
+ 3 | 27.2 (2.41, 76.8) | 45.4 (2.41, 41.5, 11.6) | 1.67x
+ 4 | 20.6 (2.63, 112.1) | 44.5 (2.63, 44.1, 15.1) | 2.16x
+ 5 | 21.9 (2.77, 107.6) | 44.5 (2.77, 44.1, 18.2) | 2.03x
+ taban (llama-lookup k=0): yamasiz 53.9 ; yamali 53.8
+R varsayilani B=3 icin 3'e cekildikten sonra, 3 tekrar:
+ k | yamasiz tok/s [3 tekrar] | yamali tok/s [3 tekrar] | medyan kazanc | tabana (53.3) gore
+ 1 | [38.1, 38.4, 38.5] | [61.9, 61.6, 61.2] | 1.61x | 1.16x   yield 1.68
+ 2 | [34.3, 34.4, 34.3] | [59.4, 60.1, 59.3] | 1.73x | 1.12x   yield 2.19
+ 3 | [27.2, 27.2, 27.3] | [45.4, 45.8, 45.2] | 1.67x | 0.85x   yield 2.41
+ taban 3 tekrar: yamasiz [53.6, 53.3, 52.6]  yamali [53.6, 50.4, 50.5]  (tabanda %6 oynama)
+Projeksiyon (kernel egrisi olcumlerinden, GERCEKLESMEDI): k=1 65.5 (1.20x), k=2 71.0 (1.30x), k=3 51.6 (0.95x). Gerceklesen: 61.2-61.9 (1.16x), 59.3-60.1 (1.12x), 45.2-45.8 (0.85x).
+
+##### llama-lookup, 7B, temp 0, GGML_METAL_SB 0/1 (JSON -n 500, prose -n 500, code -n 400, essay -n 400; 1 tekrar; gurultu payi var)
+JSON:       k | B | yamasiz tok/s (kazanc) | yamali tok/s (kazanc) | yamali/yamasiz
+ 0 | 1 | 41.0 (1.00x)* | 51.4 (1.00x) | 1.25x      (*yamasiz k=0'da 41.0 ANORMAL; onceki ayri olcumde 51.8; aciklanmadi)
+ 1 | 2 | 41.6 (1.02x) | 79.7 (1.55x) | 1.91x
+ 2 | 3 | 47.5 (1.16x) | 88.4 (1.72x) | 1.86x
+ 3 | 4 | 44.4 (1.08x) | 82.0 (1.59x) | 1.85x
+ 4 | 5 | 39.0 (0.95x) | 96.0 (1.87x) | 2.46x
+ 7 | 8 | 39.2 (0.96x) | 106.6 (2.07x) | 2.72x
+ 8 | 9 | 58.3 (1.42x) | 86.9 (1.69x) | 1.49x
+15 | 16 | 68.3 (1.67x) | 100.1 (1.95x) | 1.47x
+31 | 32 | 73.1 (1.78x) | 103.1 (2.01x) | 1.41x
+duz yazi:
+ 0 | 1 | 53.4 | 52.8 | 0.99x
+ 1 | 2 | 48.2 (0.90x) | 84.6 (1.60x) | 1.75x
+ 2 | 3 | 50.4 (0.94x) | 83.7 (1.58x) | 1.66x
+ 3 | 4 | 48.4 (0.91x) | 76.8 (1.45x) | 1.59x
+ 4 | 5 | 41.2 (0.77x) | 92.9 (1.76x) | 2.26x
+ 7 | 8 | 46.4 (0.87x) | 118.2 (2.24x) | 2.55x
+ 8 | 9 | 76.6 (1.43x) | 76.5 (1.45x) | 1.00x
+15 | 16 | 111.1 (2.08x) | 108.1 (2.05x) | 0.97x
+31 | 32 | 160.2 (3.00x) | 156.9 (2.97x) | 0.98x
+kod:
+ 0 | 1 | 50.8 | 53.5 | 1.05x
+ 1 | 2 | 46.0 (0.91x) | 87.4 (1.63x) | 1.90x
+ 2 | 3 | 51.4 (1.01x) | 97.7 (1.83x) | 1.90x
+ 3 | 4 | 45.9 (0.90x) | 86.9 (1.63x) | 1.89x
+ 4 | 5 | 40.5 (0.80x) | 100.3 (1.88x) | 2.47x
+ 7 | 8 | 44.9 (0.89x) | 127.7 (2.39x) | 2.84x
+ 8 | 9 | 78.0 (1.54x) | 78.2 (1.46x) | 1.00x
+15 | 16 | 115.1 (2.27x) | 115.5 (2.16x) | 1.00x
+31 | 32 | 170.1 (3.35x) | 171.1 (3.20x) | 1.01x
+esse (kopya yok):
+ 0 | 1 | 53.6 | 53.2 | 0.99x
+ 1 | 2 | 50.7 (0.95x) | 53.8 (1.01x) | 1.06x
+ 2 | 3 | 48.0 (0.90x) | 52.6 (0.99x) | 1.10x
+ 3 | 4 | 44.5 (0.83x) | 49.5 (0.93x) | 1.11x
+ 4 | 5 | 39.1 (0.73x) | 49.7 (0.94x) | 1.27x
+ 7 | 8 | 34.1 (0.64x) | 48.7 (0.92x) | 1.43x
+ 8 | 9 | 40.1 (0.75x) | 40.7 (0.77x) | 1.02x
+15 | 16 | 39.0 | 40.3 | 1.03x
+31 | 32 | 39.7 | 40.7 | 1.02x
+Aciklanamayanlar: (1) JSON'da B>=9 (mat-mat yolu, yama dokunmuyor) yamali/yamasiz 1.41-1.49x iken prose/kod'da 1.00x. Hipotez (OLCULMEDI): JSON'da taslak sik uyusmaz, tur basina batch sik B=2..8'e dusuyor; yama o turlari hizlandiriyor. (2) JSON k=0 yamasiz 41.0 anormal dusuk.
+
+##### tg128 regresyon (llama-bench -r 5; tok/s) orijinal(bin_base) vs yamali SB=0 vs SB=1
+7B   orijinal 53.15, 52.72 | SB0 54.33, 54.46 | SB1 54.49, 54.59
+1.5B orijinal 183.81, 184.95 | SB0 185.07, 185.44 | SB1 184.81, 185.26
+0.5B orijinal 345.10, 343.86 | SB0 340.51, 322.50 | SB1 326.01, 343.49   (0.5B K=896 -> yama devreye girmez; oynama gurultu)

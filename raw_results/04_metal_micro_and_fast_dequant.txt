@@ -1,0 +1,83 @@
+KAYNAK: bu oturum (agent), kendi Metal mikro-ciplari. Ham cikti bagliamdan aktarildi. Tek kaynak, bagimsiz tekrar YOK.
+
+##### fma.swift (ilk FMA/tam sayi/donusum mikro-olcumu; 8 bagimsiz zincir, 1M thread)
+fma_peak  60.86 ms   2756.6 G islem/s  (2.76 T)   <- DUSUK: bagimlilik zinciri/yetersiz bagimsizlik; sonradan 6.15 TFLOPS olculdu
+half_peak 56.68 ms   2959.9 G islem/s  (2.96 T)   (fp32'den yalniz %7 hizli)
+int_peak 419.96 ms    799.0 G islem/s  (0.80 T)   (satir basina 16 "kaydir+xor" deyimi; ~1.6 T temel int islem/s)
+cvt_peak 341.77 ms    122.7 G islem/s  (0.12 T)
+
+##### fma2.swift (32 bagimsiz zincir; MMA tepe testi)
+fma8   tg=128 5.55 TFLOPS | tg=256 5.50 | tg=512 5.48 | tg=1024 5.56
+fma32  tg=128 6.15 TFLOPS | tg=256 6.18 | tg=512 6.13 | tg=1024 6.14
+fma32v tg=128 5.97 TFLOPS | tg=256 5.83 | tg=512 5.90 | tg=1024 6.00   (float4 vektor)
+mma_f32acc  tg=128 6.25 TFLOPS | 256 6.24 | 512 6.22 | 1024 6.15
+mma_hacc    tg=128 6.40 TFLOPS | 256 6.38 | 512 6.39 | 1024 6.26
+Sonuc: fp32 FMA tepesi ~6.15 TFLOPS (3.07 T FMA/s). MMA ~6.2-6.4 TFLOPS (FMA tepesinden anlamli ustun degil). Onceki "2.76 T FMA/s tepe" iddiasi GERI CEKILDI.
+
+##### dq.swift (4 sozcuk = 32 agirlik/yineleme; x yazmacta; 1M thread, n=4000; "FMA-yuvasi" hesabi @2.76T'ye gore -> gostermelik)
+dq_base     28.89 ms   4645.4 G agirlik/s   (sozcuk uretimi + toplama, donusum yok)
+dq_cvt     235.32 ms    570.4 G agirlik/s   (uchar4 -> float4 donusumu; mevcut/yavas yol; 4.84 yuva/agirlik)
+dq_magicf  123.68 ms   1085.2 G agirlik/s   (float sihirli sayi 0x4B000000)
+dq_magich   97.70 ms   1373.8 G agirlik/s   (half2 sihirli sayi 0x6400; 2.01 yuva/agirlik)
+dq_halfall  93.65 ms   1433.2 G agirlik/s   (tamamen half2)
+dq_lut     211.17 ms    635.6 G agirlik/s   (256 girisli threadgroup tablosu)
+
+##### out12.txt (bench12 + kernels_mv9 "v9"; HIZLI donusum; olcek blok sonunda; kelime/lane eslemesi; reps 7; hatalar <= 5e-7)
+q4_0 benzeri: duz okuma tavani 243.0 GB/s -> 432 Gw/s
+4096x4096  okuma 254.1 GB/s (452 Gw/s) | rastgele 325.2 (578 Gw/s, 1.28x) turet P=2 193.3 (0.76x) P=3 137.4 (0.54x)
+8192x8192  okuma 250.0 GB/s (444 Gw/s) | rastgele 335.8 (597 Gw/s, 1.34x) turet P=2 193.1 (0.77x) P=3 137.1 (0.55x)
+    karisik rastgele GF=0..4: 250.0 319.2 417.5 374.1 335.8
+    karisik turet P=2 GF=0..4: 250.0 248.4 249.6 228.5 193.1
+    karisik turet P=3 GF=0..4: 250.0 249.6 223.8 169.7 137.1
+18944x3584 okuma 250.5 (445 Gw/s) | rastgele 334.0 (594, 1.33x) P=2 193.0 (0.77x) P=3 136.9 (0.55x)
+    karisik rastgele: 250.5 320.9 414.4 371.5 334.0 ; P=2: 250.5 248.5 248.4 228.2 193.0 ; P=3: 250.5 247.4 223.6 169.6 136.9
+3584x18944 okuma 245.8 (437) | rastgele 332.1 (590, 1.35x) P=2 190.9 (0.78x) P=3 135.6 (0.55x)
+q8_0 benzeri: tavan 243.3 GB/s -> 229 Gw/s
+4096x4096  okuma 239.4 (225) | rastgele 632.9 (596, 2.64x) P=2 365.3 (1.53x) P=3 259.4 (1.08x)
+8192x8192  okuma 247.8 (233) | rastgele 633.1 (596, 2.56x) P=2 365.0 (1.47x) P=3 258.6 (1.04x)
+    karisik rastgele: 247.8 322.6 467.7 704.5 633.1 ; P=2: 247.8 278.0 323.2 382.4 365.0 ; P=3: 247.8 278.3 319.3 321.8 258.6
+18944x3584 okuma 245.3 (231) | rastgele 630.0 (593, 2.57x) P=2 365.1 (1.49x) P=3 258.9 (1.06x)
+    karisik rastgele: 245.3 323.3 462.3 701.1 630.0 ; P=2: 245.3 280.0 323.7 381.2 365.1 ; P=3: 245.3 280.9 323.0 321.6 258.9
+3584x18944 okuma 244.7 (230) | rastgele 627.4 (591, 2.56x) P=2 360.7 (1.47x) P=3 253.9 (1.04x)
+fp16 benzeri: tavan 244.5 GB/s -> 122 Gw/s
+4096x4096  okuma 248.4 (124) | rastgele 1192.1 (596, 4.80x) P=2 687.4 (2.77x) P=3 481.2 (1.94x)
+8192x8192  okuma 245.2 (123) | rastgele 1193.6 (597, 4.87x) P=2 686.2 (2.80x) P=3 486.9 (1.99x)
+    karisik rastgele: 245.2 319.8 478.3 902.1 1193.6 ; P=2: 245.2 291.2 385.9 530.4 686.2 ; P=3: 245.2 300.1 383.3 533.4 486.9
+18944x3584 okuma 243.9 (122) | rastgele 1187.9 (594, 4.87x) P=2 686.2 (2.81x) P=3 487.4 (2.00x)
+3584x18944 okuma 238.7 (119) | rastgele 1180.3 (590, 4.94x) P=2 678.2 (2.84x) P=3 482.1 (2.02x)
+
+##### out13.txt (bench13 + kernels_mv9 "w"; uretici varyantlari, P=2/3; sanal GB/s (okumaya oran) ; GF=4 | GF=3 | GF=2; reps 5; hatalar <= 4e-7)
+q4_0 8192x8192: okuma 257.9 GB/s (459 Gw/s)
+  rastgele (taban)          335.1 (1.30x) | 375.0 (1.45x) | 421.8 (1.64x)
+  A xorshift P=2            193.4 (0.75x) | 229.1 (0.89x) | 256.3 (0.99x)
+  B ertelenmis ofset P=2    192.1 (0.74x) | 229.9 (0.89x) | 256.8 (1.00x)
+  C tek-adim rotasyon P=2   201.8 (0.78x) | 240.5 (0.93x) | 257.2 (1.00x)
+  D tek-carpim hash 2bit P=2 218.1 (0.85x) | 252.1 (0.98x) | 256.3 (0.99x)
+  E tek-carpim +-1 secim P=2 258.7 (1.00x) | 257.6 (1.00x) | 256.8 (1.00x)
+  A xorshift P=3            137.1 (0.53x) | 169.5 (0.66x) | 224.3 (0.87x)
+  B ertelenmis ofset P=3    139.9 (0.54x) | 171.5 (0.67x) | 222.3 (0.86x)
+  C tek-adim rotasyon P=3   157.3 (0.61x) | 192.0 (0.74x) | 246.7 (0.96x)
+q4_0 18944x3584 (ayni sira): rastgele 333.2/372.7/419.4 ; A P=2 193.2/228.9/258.0 ; B 191.9/229.4/257.8 ; C 201.5/240.4/257.9 ; D 217.5/251.5/258.0 ; E 257.6/258.0/257.2 ; A P=3 137.2/169.5/223.8 ; C P=3 157.2/191.9/246.6
+q8_0 8192x8192: okuma 256.6 (242 Gw/s)
+  rastgele 633.0 (2.47x) | 704.8 (2.75x) | 487.6 (1.90x)
+  A P=2 365.4 (1.42x) | 395.2 (1.54x) | 333.8 (1.30x)
+  B P=2 362.8 (1.41x) | 397.1 (1.55x) | 335.8 (1.31x)
+  C P=2 380.8 (1.48x) | 396.9 (1.55x) | 335.5 (1.31x)
+  D P=2 411.7 (1.60x) | 395.5 (1.54x) | 335.6 (1.31x)
+  E P=2 491.3 (1.91x) | 396.3 (1.54x) | 335.4 (1.31x)
+  A P=3 259.0 (1.01x) | 321.8 (1.25x) | 333.2 (1.30x)
+  B P=3 264.2 (1.03x) | 326.3 (1.27x) | 333.9 (1.30x)
+  C P=3 296.7 (1.16x) | 363.1 (1.41x) | 335.1 (1.31x)
+fp16 8192x8192: okuma 254.9 (127 Gw/s)
+  rastgele 1190.7 (4.67x) | 940.0 (3.69x) | 495.3 (1.94x)
+  A P=2 686.5 (2.69x) | 555.0 (2.18x) | 399.6 (1.57x)
+  B P=2 682.3 (2.68x) | 553.4 (2.17x) | 398.1 (1.56x)
+  C P=2 717.3 (2.81x) | 555.5 (2.18x) | 398.8 (1.56x)
+  D P=2 774.9 (3.04x) | 551.6 (2.16x) | 395.2 (1.55x)
+  E P=2 909.4 (3.57x) | 552.2 (2.17x) | 395.2 (1.55x)
+  A P=3 487.5 (1.91x) | 548.9 (2.15x) | 392.4 (1.54x)
+  B P=3 497.2 (1.95x) | 540.6 (2.12x) | 394.6 (1.55x)
+  C P=3 559.3 (2.19x) | 551.1 (2.16x) | 394.0 (1.55x)
+fp16 18944x3584: A P=2 686.0/548.3/394.4 ; B 681.5/550.9/394.9 ; C 716.1/549.6/397.9 ; D 772.9/548.3/393.5 ; E 904.1/551.7/398.3 ; rastgele 1184.0/928.4/491.0
+Not: hibrit GF=2/3'te tum turetme varyantlari ayni sureyi veriyor -> okunan satirlarin belleginde sinirli. Turetilen satirlar da tohum (0.5625 B/agirlik) okudugu icin saf turetme tavani = 254/0.5625*(sanal B/agirlik) (q8 1.89x, fp16 3.56x). E bu tavana ulasir.
+A xorshift P=2 hesap sinirli: 343 G agirlik/s uc formatta ayni; E bellek sinirli: ~460 G agirlik/s (tavan 451); rastgele ~596 G agirlik/s hesap sinirli.

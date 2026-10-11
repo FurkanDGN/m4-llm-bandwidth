@@ -1,0 +1,22 @@
+KAYNAK: bu oturum (agent). xctrace denemeleri; SONUC: GPU sayaclari (ALU limiter / bellek limiter / occupancy) YAKALANAMADI.
+
+Ortam: macOS 26.5.1 (25F80), xctrace 16.0 (17F113), Xcode /Applications/Xcode.app (xcode-select -p oradaydi). M4 Pro.
+Not: Xcode kurulmadan once `xctrace` sistemde "requires Xcode" hatasi veriyordu; kurulduktan sonra calisti.
+
+Komutlar ve sonuclari:
+1) xcrun xctrace list templates   -> Activity Monitor, Allocations, Animation Hitches, App Launch, Audio System Trace, CPU Counters, CPU Profiler, Core ML, Data Persistence, File Activity, Game Memory, Game Performance, Game Performance Overview, Leaks, Logging, Metal System Trace, Network, Power Profiler, Processor Trace, RealityKit Trace, Swift Concurrency, SwiftUI, System Trace, Tailspin, Time Profiler
+   xcrun xctrace list instruments | grep -iE "gpu|metal|counter|limit" -> CPU Counters, GPU, Metal Application, Metal GPU Counters, Metal Performance Overview, Metal Resource Events
+2) xcrun xctrace record --instrument 'Metal GPU Counters' --instrument 'Metal Application' --time-limit 40s --output t1.trace --launch -- llama-bench -m 1.5B -ngl 99 -p 0 -n 32 -r 2
+   -> "Run issues were detected: [Warning] GPU Service reported error: Selected counter profile is not supported on target device"
+   (toc: Metal GPU Counters ayari "Counter Set: Performance Limiters, Shader Timeline: Enabled, Induced GPU Performance State: Default"; gpu-counter-value tablosu bos)
+3) Ayni hata duz bir Metal programiyla da (fma2) ve --instrument 'Metal GPU Counters' ile: "Selected counter profile is not supported on target device" (gpu-counter-info counter-profile="3" counter-device="0" shader-profiler="1").
+   -> Hata llama-bench'e ozgu degil; varsayilan "Performance Limiters" profili bu cihazda/ortamda desteklenmiyor gorunuyor. Neden bilinmiyor.
+4) --template 'Metal System Trace' ve --template 'Game Performance' (llama-bench 1.5B -n 64 -r 2): kayit basarili; yalniz zaman cizelgesi tablolari (metal-gpu-intervals vb., metal-shader-profiler-intervals, metal-application-encoders-list, ...). Limiter/occupancy sayac tablosu YOK.
+5) xctrace export --input X.trace --toc ve --xpath '/trace-toc/run[@number="1"]/data/table[@schema="gpu-counter-value"]' vb. -> yalniz sema tanimlari; satir yok.
+
+Denenmeyen / sonraki adimlar:
+ - Instruments GUI'de Metal GPU Counters ayarini (Counter Set secenekleri) acip .tracetemplate olarak kaydetmek ve --template <dosya> ile CLI'dan kullanmak.
+ - Xcode Metal Debugger (GPU Frame Capture) ile .gputrace almak ve Counters sekmesine GUI'den bakmak.
+ - Not: CLI'da counter set secimi icin dogrudan bayrak bulamadim.
+Cikarim (SAYAC DEGIL, degisken-cikarma): xorshift turetme hesap sinirli (343 G agirlik/s uc formatta ayni), E bellek sinirli, rastgele uretim hesap sinirli (596 G agirlik/s), B=1 q4 okuma bellek sinirli (tavan ~250 GB/s). MMA B<=8'de ~4.5 TFLOPS (FMA/MMA tepesi ~6.2'ye gore ~%72; bu "tepede" iddiasini sayaclar dogrulamadi).
+NOT (panik): makine bellek baskisindan kernel panic ile yeniden basladi (compressor, 21 swapfile). Benim komutlarim ardisik ve on plandaydi; kesin nedeni bilmiyorum.

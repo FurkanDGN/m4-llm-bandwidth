@@ -1,0 +1,108 @@
+KAYNAK: bu oturum (agent), kendi Metal mikro-ciplari. Ham cikti bagliamdan aktarildi. DIKKAT: Bu bolumdeki tum q4/q8 sayilari YAVAS donusum yoluyla (uchar4 -> float4) alinmistir ve 03b/06'daki hizli donusum sonuclariyla DEGISTIRILMISTIR. Ilk q4 sonuclari yanlis yonlendirdi (bkz. SONUCLAR.md, "neden ihtiyat").
+Doğrulama: her koşuda okuyan/ureten cikti CPU cift hassasiyet referansiyla (ornek satirlar) karsilastirildi; hata <= 1e-6 (goreli).
+
+##### out1.txt  (bench.swift + kernels.metal; ilk okuyan cekirdek; 2^31 agirlik/dispatch; reps 15)
+GPU: Apple M4 Pro  workingSet: 19069 MB
+Duz okuma (bant tavani): medyan 3.96 ms = 254.3 GB/s, en iyi 255.4 GB/s
+sanal bayt = kod (16 B) + olcek (2 B) / 32 agirlik blogu, yani q4_0 ile ayni 0.5625 B/agirlik
+boyut B | OKUYAN (medyan) | URETEN (medyan) | oran / dogrulama
+1024x1024 2048 |  6.52 ms 185.2 GB/s | 5.12 ms 236.0 GB/s (gercek 26.2) | 1.27x y1-y2 4.8e-07, CPU 1.3e-07 (|y|max 2.6)
+2048x2048  512 |  6.90 ms 175.0 GB/s | 5.13 ms 235.4 GB/s (gercek 26.2) | 1.35x y1-y2 7.2e-07, CPU 3.0e-07 (|y|max 3.9)
+4096x4096  128 |  6.50 ms 185.8 GB/s | 5.13 ms 235.4 GB/s (gercek 26.2) | 1.27x y1-y2 9.5e-07, CPU 1.4e-07 (|y|max 4.7)
+8192x8192   32 |  6.16 ms 196.0 GB/s | 5.13 ms 235.3 GB/s (gercek 26.1) | 1.20x y1-y2 1.2e-06, CPU 1.8e-07 (|y|max 7.1)
+18944x3584  31 |  6.15 ms 192.6 GB/s | 5.07 ms 233.5 GB/s (gercek 25.9) | 1.21x y1-y2 9.5e-07, CPU 2.4e-07 (|y|max 5.3)
+3584x18944  31 |  5.54 ms 213.9 GB/s | 5.04 ms 234.7 GB/s (gercek 26.1) | 1.10x y1-y2 1.9e-06, CPU 6.5e-07 (|y|max 10.2)
+G agirlik/s (okuyan/ureten): 1024: 329/419 ; 2048: 311/418 ; 4096: 330/419 ; 8192: 348/418 ; 18944x3584: 342/415 ; 3584x18944: 380/417
+NOT: bu "okuyan" cekirdek kod duzeni yuzunden tavanin altindaydi (175-214 GB/s); sonradan kernels3'teki sablon cekirdek 244-257 GB/s verdi. Baz cizgisini bagimsiz dogrulamadan kullanmak yaniltici olurdu.
+
+##### out2_decomp.txt (bench2 decomp; 8192x8192, B=32, 2^31 agirlik; mv_var, function constants)
+okuma           (G=0)   6.13 ms   350.2 G agirlik/s  (sanal 197.0 GB/s)
+okuma, x yazmacta (G=0)   5.47 ms   392.3 G agirlik/s  (sanal 220.7 GB/s)
+okuma, olcek yok (G=0)   8.70 ms   246.8 G agirlik/s  (sanal 138.8 GB/s)    <- anormal (derleyici siralama etkisi), yorumlanmadi
+uretim          (G=4)   5.13 ms   418.3 G agirlik/s  (sanal 235.3 GB/s)
+uretim, PRNG yok (G=4)   3.81 ms   563.4 G agirlik/s  (sanal 316.9 GB/s)
+yalniz PRNG      (G=4)   0.81 ms  2649.3 G agirlik/s  (sanal 1490.2 GB/s)
+uretim, x yazmacta (G=4)   5.12 ms   419.2 G agirlik/s  (sanal 235.8 GB/s)
+uretim, olcek yok (G=4)   5.12 ms   419.4 G agirlik/s  (sanal 235.9 GB/s)
+
+##### out2_hybrid.txt (bench2 hybrid; sanal GB/s (ms, ok); eski okuyan cekirdek)
+1024x1024 |  195.6 (6.18 ms, ref) | 249.6 (4.84, ok) | 243.3 (4.97, ok) | 234.6 (5.15, ok) | 235.9 (5.12, ok)
+2048x2048 |  181.8 (6.64) | 234.1 (5.16) | 241.3 (5.01) | 233.7 (5.17) | 235.4 (5.13)
+4096x4096 |  187.8 (6.43) | 225.6 (5.35) | 237.6 (5.08) | 231.2 (5.23) | 232.6 (5.19)
+8192x8192 |  196.1 (6.16) | 223.0 (5.42) | 230.5 (5.24) | 226.9 (5.32) | 235.3 (5.13)
+18944x3584|  195.4 (6.06) | 225.0 (5.26) | 233.2 (5.08) | 223.9 (5.29) | 233.5 (5.07)
+3584x18944|  213.4 (5.55) | 229.9 (5.15) | 233.2 (5.08) | 226.3 (5.23) | 234.8 (5.04)
+
+##### out3.txt (bench3 + kernels3; T=2^29; sablon cekirdekler; YAVAS donusum)
+q4_0 benzeri: duz okuma tavani (268 MB): 253.3 GB/s -> 450 G agirlik/s
+8192x8192 B=8  | okuyan 1.24 ms 243.9 GB/s 434 Gw/s | ureten 1.32 ms 228.0 GB/s 405 Gw/s | 0.93x | y1-y2 1.2e-06 CPU 3.0e-07
+4096x4096 B=32 | okuyan 1.21 ms 248.6 GB/s 442 Gw/s | ureten 1.32 ms 228.4 GB/s 406 Gw/s | 0.92x
+18944x3584 B=7 | okuyan 1.12 ms 238.1 GB/s 423 Gw/s | ureten 1.19 ms 223.7 GB/s 398 Gw/s | 0.94x
+q8_0 benzeri: tavan 254.0 GB/s -> 239 Gw/s
+8192x8192 | okuyan 2.23 ms 255.9 GB/s 241 Gw/s | ureten 1.72 ms 330.7 GB/s 311 Gw/s | 1.29x | y1-y2 0
+fp16 benzeri: tavan 253.4 GB/s -> 127 Gw/s
+8192x8192 | okuyan 4.71 ms 227.8 GB/s 114 Gw/s | ureten 1.12 ms 959.7 GB/s 480 Gw/s | 4.21x
+q4 2^31 agirlikta (bench3 15 31 4): 8192x8192 okuyan 4.86 ms 248.7 GB/s, ureten 5.29 ms 228.6 GB/s (0.92x) -> iş boyutu fark yaratmiyor.
+
+##### out3b.txt (T=2^29, altı boyut; YAVAS donusum; q8 isaretsiz-bayt ofsetli)
+q4_0 benzeri: tavan 246.2 GB/s
+1024x1024 B=512 | okuyan 1.17 ms 257.2 GB/s 457 Gw/s | ureten 1.32 ms 228.3 GB/s 406 Gw/s | 0.89x
+2048x2048 B=128 | 1.20 ms 251.4 | 1.32 ms 228.2 | 0.91x
+4096x4096 B=32  | 1.22 ms 248.3 | 1.32 ms 228.4 | 0.92x
+8192x8192 B=8   | 1.24 ms 243.7 | 1.32 ms 228.0 | 0.94x
+18944x3584 B=7  | 1.12 ms 237.9 | 1.19 ms 223.9 | 0.94x
+3584x18944 B=7  | 1.14 ms 234.6 | 1.19 ms 225.0 | 0.96x
+q8_0 benzeri: tavan 250.7 GB/s
+1024x1024 | okuyan 2.17 ms 263.1 GB/s | ureten 1.74 ms 328.8 | 1.25x
+4096x4096 | 2.37 ms 240.7 | 1.74 ms 327.2 | 1.36x
+8192x8192 | 2.38 ms 239.7 | 1.75 ms 326.8 | 1.36x
+18944x3584| 2.09 ms 241.3 | 1.58 ms 320.6 | 1.33x
+3584x18944| 2.23 ms 226.2 | 1.56 ms 323.1 | 1.43x
+fp16 benzeri: tavan 249.5 GB/s
+1024x1024 | okuyan 4.22 ms 254.2 GB/s | ureten 1.17 ms 920.9 | 3.62x
+4096x4096 | 4.80 ms 223.5 | 1.12 ms 957.9 | 4.29x
+8192x8192 | 4.61 ms 232.8 | 1.12 ms 959.7 | 4.12x
+18944x3584| 4.27 ms 222.8 | 1.11 ms 852.9 | 3.83x
+3584x18944| 3.96 ms 239.8 | 1.04 ms 914.7 | 3.82x
+(tum satirlarda y1-y2 <= 1e-6 goreli, CPU <= 3e-5 mutlak/|y|~100)
+
+##### out4b.txt (bench4; karisik; sanal GB/s (ms, goreli hata); YAVAS donusum; yeni okuyan cekirdek)
+q4_0:   GF=0 | GF=1 | GF=2 | GF=3 | GF=4(uretim)
+1024x1024  257.0 | 246.0 | 246.0 | 236.6 | 228.4
+4096x4096  248.7 | 184.7 | 235.7 | 235.0 | 228.3
+8192x8192  244.6 | 170.0 | 228.5 | 233.4 | 228.1
+18944x3584 238.0 | 192.1 | 227.3 | 229.4 | 223.9
+3584x18944 234.6 | 197.5 | 226.8 | 229.5 | 225.1
+q8_0:
+1024x1024  265.1 | 331.5 | 355.1 | 438.2 | 328.6
+4096x4096  241.6 | 321.3 | 347.7 | 438.1 | 327.2
+8192x8192  239.5 | 321.3 | 343.1 | 437.8 | 326.9
+18944x3584 238.8 | 316.6 | 340.7 | 435.4 | 320.5
+3584x18944 225.6 | 310.9 | 329.0 | 435.5 | 323.6
+(goreli hata <= 2e-7)
+
+##### out5A2.txt (bench5 A; saf turetme; G agirlik/s (ms); YAVAS donusum; sanal bayt 18 B/32 agirlik)
+boyut | q4 OKU | q4 RASTGELE | TURET P=1 | TURET P=2 | TURET P=3 | TURET P=4
+1024x1024  | 455 (1.18) | 406 (1.32) | 274 (1.96) | 183 (2.93) | 124 (4.33) | 94 (5.73)
+2048x2048  | 447 (1.20) | 406 (1.32) | 242 (2.22) | 181 (2.97) | 121 (4.43) | 94 (5.73)
+4096x4096  | 440 (1.22) | 406 (1.32) | 246 (2.18) | 178 (3.01) | 123 (4.35) | 93 (5.76)
+8192x8192  | 435 (1.23) | 405 (1.32) | 246 (2.18) | 179 (3.00) | 122 (4.40) | 93 (5.76)
+18944x3584 | 422 (1.13) | 398 (1.19) | 256 (1.85) | 177 (2.69) | 123 (3.88) | 93 (5.12)
+3584x18944 | 418 (1.14) | 400 (1.19) | 288 (1.65) | 178 (2.67) | 122 (3.90) | 92 (5.17)
+(turetme hatalari 1e-7 .. 3e-7)
+
+##### out5B.txt (bench5 B; karisik, P=3; sanal GB/s; YAVAS donusum)
+q8_0 (rastgele | turetme): GF=0..4
+8192x8192 rastgele 240.0 | 322.4 | 342.7 | 437.7 | 326.8 ; turetme 239.9 | 235.5 | 197.5 | 163.2 | 132.6
+fp16:
+8192x8192 rastgele 226.4 | 302.3 | 440.8 | 1045.1 | 959.5 ; turetme 230.9 | 283.4 | 377.3 | 330.1 | 245.9
+q4_0:
+8192x8192 rastgele 242.9 | 170.8 | 228.8 | 233.1 | 227.9 ; turetme 243.3 | 151.6 | 110.1 | 85.7 | 69.5   <-- "243 -> 70 GB/s" (YAVAS donusum + xorshift P=3; hizli donusumla 250 -> 137)
+(hatalar <= 5e-7)
+
+##### out5C.txt (bench5 C; 8192x8192; sanal GB/s, GF=0..4; YAVAS donusum)
+q8_0 P=2 | 238.2 | 273.1 | 248.5 | 232.4 | 197.5
+q8_0 P=3 | 240.1 | 235.5 | 197.5 | 163.3 | 132.6
+fp16 P=2 | 232.3 | 285.9 | 381.3 | 485.6 | 371.8
+fp16 P=3 | 231.5 | 286.3 | 371.2 | 330.0 | 249.5
+fp16 P=4 | 226.6 | 287.4 | 346.9 | 247.2 | 187.1
