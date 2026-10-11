@@ -425,11 +425,40 @@ Bulgular:
 - "Hesap tavanında" doğrulanmadı: hiçbir birim sınırda değil; ALU %42, en yüksek sınırlayıcı F32 %68. Bölüm 17'deki "tepenin %52'si" hesabı F32 kullanımıyla (%56) uyumlu, ama bu "hesap sınırlı" demek için yetmez.
 - ALU %100'e çıkabilseydi işlem ~165 us olurdu (397 us x 0.416; tahmin, ölçüm değil). Bu B=1'in 141 us'sine yakın.
 - Doluluk %14.5: 64 grup x 128 parçacık = 8192 parçacık, 16 çekirdeği doldurmuyor (hesap; ~3072 parçacık/çekirdek varsayımıyla %16.7).
-- Aynı ağırlık sayısı (m x k eşit), farklı süre: 18944x3584'te 301 us (296 grup), 3584x18944'te 435 us (56 grup). Paralellik süreyi etkiliyor. Ters veri: bölüm 17'de tm1 u4 (iki kat grup, 4'lü açma) %0-4 kazandırdı. Çelişki çözülmedi. Bu iki boyut için sayaç alınmadı, yalnız süre ölçüldü.
+- Gerçek 7B boyutları aşağıda; paralellik süreyi belirliyor.
 
-Bölüm 17'ye düzeltme: "35 ms duvarı yapısal donanım kısıtı" hükmünün "sabit 8 sütun işi" yarısı sayaçla doğrulandı. "Bu iş tepeyi doldurduğu için duvar" yarısı doğrulanmadı: çekirdek ALU'nun %42'sinde. Duvar donanım kısıtı olarak kapatılamaz; "çekirdek tasarımı ve paralellik" olarak açık.
+### 19.1 Gerçek 7B boyutları (B=4, aynı yöntem; ham veri `raw_results/gpu_sayac/up_n4.csv`, `down_n4.csv`)
+
+İşlem başına süre (us, test-backend-ops perf) ve B=1'e oran:
+
+| boyut | n=1 | n=2 | n=3 | n=4 | n=8 |
+|---|---|---|---|---|---|
+| 18944 x 3584 (gate/up, 296 grup) | 150 | 156 | 195 | 301 (2.0x) | 309 (2.1x) |
+| 3584 x 18944 (down, 56 grup) | 157 | 177 | 258 | 435 (2.8x) | 461 (2.9x) |
+
+Sayaçlar (B=4, iki kuyruk aralığı):
+
+| sayaç | 4096 x 14336 (64 grup) | 18944 x 3584 (296 grup) | 3584 x 18944 (56 grup) |
+|---|---|---|---|
+| doluluk | %14.5 | %38.6-41.6 | %12.2 |
+| ALU kullanımı | %41.6 | %51.0 | %37.4-37.6 |
+| F32 sınırlayıcı | %67.9 | %84.8 | %61.0-61.2 |
+| F32 kullanımı | %55.7 | %68.0 | %50.1-50.3 |
+| komut hacmi sınırlayıcı | %64.4-64.7 | %83.1-83.3 | %50.1 |
+| cihaz belleği bandı (GB/s) | 74.5-75.8 | 90.7-91.1 | 66.9-68.6 |
+| parçacık başına ALU komutu | 93 740 | 23 514 | 123 836 |
+
+Bulgular:
+- Parçacık başına komut k ile orantılı; ağırlık başına komut üç boyutta da ~13.1 (parçacık sayısı grup x 128 varsayımıyla hesap).
+- Doluluk, ALU kullanımı ve F32 sınırlayıcı birlikte artıyor: %12 doluluk ile %37 ALU ve %61 F32; %39-42 doluluk ile %51 ALU ve %85 F32.
+- Gate/up boyutunda çekirdek F32 tavanına yakın (sınırlayıcı %85): orada B=4 maliyeti B=1'in 2.0 katı ve "sabit 8 sütun işi" duvarı büyük ölçüde gerçek.
+- Down boyutu aynı baytı ve aynı komut toplamını işliyor ama 56 grupla F32 yalnız %61: süre 435 us, gate/up'ın 1.45 katı. ALU kullanımı oranı (51.0 / 37.5 = 1.36) süre oranıyla yaklaşık uyumlu.
+- Tahmin, ölçüm değil: down gate/up düzeyine (301 us) çıksa FFN süresi layer başına ~%13, tüm adımda ~%10 kısalır (35 ms yerine ~31 ms). Bölüm 17'deki tm1 u4 (%0-4 tüm adım) bununla çelişmiyor. B=1 tabanı olan 17.5 ms'ye yetmez.
+- Qwen2.5-7B'de q/o (3584 satır, 56 grup) ve k/v (512 satır, 8 grup) da düşük gruplu; bunların sayacı alınmadı.
+
+Bölüm 17'ye düzeltme: "35 ms duvarı yapısal donanım kısıtı" hükmü gate/up için doğru (F32 sınırlayıcı %85, B=1'in 2.0 katı). 4096 testinde ve down boyutunda paralellik kaybı ek yavaşlık yapıyor. Duvarın büyük kısmı sabit 8 sütun işi, küçük kısmı (tahmini ~%10) düşük grup sayısı.
 
 Açık işler:
-- `up_n4` / `down_n4` sayaçları (doluluk ve ALU kullanımı gerçek boyutta nasıl).
-- B=1 kontrol sayacı (`n1_sb1`).
-- Bölüm 5'teki split-K (E7): paralellik hipotezini doğrudan sınar.
+- Down, q ve o için daha küçük satır dilimi (tm1) ya da split-K (bölüm 5, E7): yalnız bu boyutlarda uçtan uca ölçülmedi, kazanç tahmini ~%10.
+- F32 sınırlayıcı %85'in ötesine geçmeyi engelleyen neden bilinmiyor (MMA, half ve tamsayı komutları aynı hattı paylaşıyor olabilir; ölçülmedi).
+- B=1 kontrol sayacı (`n1_sb1`) alınmadı, gerekmedi.
