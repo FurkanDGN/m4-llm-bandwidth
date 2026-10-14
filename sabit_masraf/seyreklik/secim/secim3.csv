@@ -1,0 +1,13 @@
+duzen,ppl
+down0.5 hepsi duz,6.9449
+down0.5 hepsi |h|*norm,6.8941
+down0.6 hepsi duz,7.1350
+down0.6 hepsi |h|*norm,7.0493
+down0.7 hepsi duz,7.6272
+down0.7 hepsi |h|*norm,7.6185
+up0.5<=19 d0.5 |u|*g,7.1098
+up0.5<=19 d0.5 |u|*g*norm, down |h|*norm,7.1691
+up0.5<=19 d0.5 |u|*norm (g'siz),7.0920
+up0.5<=19 d0.5 |u|*g, down |h|*norm,7.1038
+up0.4<=19 d0.5 |u|*g*norm, down |h|*norm,6.9241
+up0.6<=19 d0.5 |u|*g*norm, down |h|*norm,7.5205

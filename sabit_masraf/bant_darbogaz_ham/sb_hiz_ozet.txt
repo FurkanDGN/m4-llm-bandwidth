@@ -1,0 +1,4 @@
+model 05  p=2 kapali 3.770 ms acik 3.727 ms fark -0.043 ms (%-1.1) acik hizli 3/5 tur
+model 05  p=3 kapali 4.399 ms acik 4.278 ms fark -0.121 ms (%-2.7) acik hizli 4/5 tur
+model 7   p=2 kapali 19.854 ms acik 22.489 ms fark +2.635 ms (%+13.3) acik hizli 0/5 tur
+model 7   p=3 kapali 23.961 ms acik 27.907 ms fark +3.946 ms (%+16.5) acik hizli 0/5 tur

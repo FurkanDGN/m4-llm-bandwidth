@@ -7,13 +7,14 @@ Bu belge anlatıdır; kod dosyalarında anlatı yoktur. Sayılar için `SONUCLAR
 
 - Makine bellek baskısıyla kernel panic ile yeniden başladı; `/tmp` altındaki tüm çalışma dizini silindi.
 - Bu paketteki tüm dosyalar, oturum bağlamından **yeniden yazıldı**. Orijinal bayt bayt kopya değil.
-- Yeniden yazılan hiçbir dosya, yazıldıktan sonra **derlenmedi ve çalıştırılmadı**. Yazım hatası olabilir.
+- Yeniden yazılan dosyalar, yazıldıkları anda **derlenmedi ve çalıştırılmadı**. Yazım hatası olabilir.
+- Sonradan: `llama_patch/apply_patch.py` temiz commit'e uygulandı ve derlendi; `TUR1-DOGRULAMA.md` ölçümleri bu yerel derlemeyle yapıldı. Metal mikro ve toplu çekirdek dosyaları için böyle bir doğrulama belgelenmedi.
 - İlk çalıştırmada derleme hatası çıkarsa önce şuna bak: `.metal` dosyalarında örnekleme (instantiation) satırları ya dosyanın içinde ya da `gen_*_instances.py` üreticisinde.
 - Ayrıntılı eksik listesi: bölüm 9.
 
 ## 1. Çalışmanın özeti (tek paragraf)
 
-M4 Pro (16 çekirdek GPU, 24 GB, ~254 GB/s ölçülen akış tavanı) üzerinde llama.cpp Metal ile q4_0 decode bellek sınırlı (7B: ~54 tok/s, ~241 GB/s etkin).
+M4 Pro (16 çekirdek GPU, 24 GB, 258-264 GB/s gerçek okuma tavanı) üzerinde llama.cpp Metal ile q4_0 decode bellek sınırlı (7B: ~54.8 tok/s; token süresi 1.63 ms + 3.99 ms/GB, yani ~251 GB/s etkin).
 Sorular: (1) bayt yerine hesapla ağırlık türetmek hız verir mi, (2) 2-8 tokenlık doğrulama grubu neden "token başına tam fiyat" ödüyor (spekülatif decode'u öldürüyor), donanım mı yazılım mı?
 Bulgular: (a) 2-8 klifi implementasyondur: llama.cpp'nin `mul_mv_ext` çekirdeği x'i satırlar arasında paylaşmıyor; benzer işi bir kez okuyan çekirdekler B=2'de 1.0x, B=3'te 1.1-1.6x, B=4-8'de 1.7-2.4x veriyor (llama.cpp 1.9 ile 7.5x). (b) Yamayla 7B+0.5B spekülatif 1.12-1.16x (tabandan hızlı) oldu; yamasız 0.63-0.70x idi. (c) Türetme: q4'te okumayı geçemez (aynı bayt), q8/fp16'ya karşı kazanır; ama ilk q4 sonuçlarım yavaş uchar→float dönüşümünden bozuktu (bölüm 8).
 
@@ -60,7 +61,7 @@ raw_results/                     ham çıktılar (bağlamdan aktarıldı)
 - **Karıştırma (interleave):** karşılaştırılan çekirdekler her tekrarda sırayla koşar (K1,K2,K1,K2...). Termal/sıklık sürüklenmesi iki tarafa eşit dağılsın diye.
 - **Çalışma kümesi:** dispatch başına sabit **2^29 ağırlık** (`T = 1<<29`; bazı ilk deneylerde 2^31). Matris boyutuna göre `Mx = T/(rows*cols)` matris tek dispatch'te (grid.y = matris). Amaç: (1) önbelleği aşmak (q4'te 268 MB, fp16'da 1 GB), (2) dispatch masrafını amortize etmek, (3) boyutları kıyaslanabilir tutmak.
 - **Sanal bayt:** formatın saklanma bayt sayısı: q4_0 benzeri 18 B / 32 ağırlık (16 kod + 2 ölçek), q8_0 benzeri 34 B, fp16 64 B. "Sanal GB/s" = ağırlık sayısı × (bayt/ağırlık) / süre. Üretilen ağırlıkların da belleği "okumuş gibi" sayılması bilinçli karar; "gerçek GB/s" ayrıca yazıldı (üretenin sadece ölçeği okuduğu).
-- **Bant tavanı:** `stream_read` çekirdeği (uint4 yük, 4 bağımsız yük/yineleme, 1M thread) aynı tampon üzerinde: ~243-254 GB/s. Tüm "tavan" yorumları buna göre.
+- **Bant tavanı:** `stream_read` çekirdeği (uint4 yük, 4 bağımsız yük/yineleme, 1M thread) aynı tampon üzerinde: ~243-254 GB/s. Bu değer düşük ölçümdü (eski akış deseni ve soğuk başlangıç); ısınmalı bağımsız ölçüm gerçek tavanı 258-264 GB/s verdi (`main_session/TUR1-DOGRULAMA.md` bölüm 13). Mikro-ölçüm tablolarındaki "tavan" yorumları 254'e göre yapılmıştı.
 - **Doğrulama:** her ölçüm programı çıktıyı bir tampona yazar (derleyici işi silemez) ve **CPU'da çift hassasiyetle yeniden hesaplanan örnek satırlarla** karşılaştırır (10 satır: baş, orta, son; sütunlar dahil). Göreli hata (max|fark|/max|y|) ≤ 5e-7 olmayan hiçbir sonuç raporlanmadı. MMA çekirdeğinde x yarım hassasiyete yuvarlanıp referansta da aynısı yapıldı (`halfX`).
 - **Okuyan ↔ üreten eşitliği:** aynı rastgele içerik (`gen_block`/`hashw` ile) hem bellekte doldurulup okunuyor hem çekirdekte üretiliyor; bu yüzden y1 = y2 (ilk dönemde bit düzeyinde, sonra göreli ≤ 2e-7) olmalı. Karışık çekirdeklerde satır türü kuralı: `(satır & 3) < GF` satırlar üretilir (satır grubu uzunluğu 4'ün katı olduğundan derleme zamanında bilinir, SIMD ıraksaması yok).
 - **7B eşdeğeri:** 7.62e9 / 2^29 = 14.2. Mat-mat süresi × 14.2 ≈ 7B'de o parti için matmul süresi. B=1 için 1.17 ms × 14.2 = 16.6 ms; llama.cpp 18.2 ms (attention vs. dahil).
@@ -102,12 +103,12 @@ python3 -I llama_patch/apply_patch.py src      # yama; sonra yeniden derle
 - Lookup: `llama-lookup -m 7B -ngl 99 --temp 0 -n 500 -c 4096 -f istem.txt --spec-draft-n-max k` (k=0 düz decode tabanı). İstem dosyaları chat şablonlu ham metin (`<|im_start|>...`).
 - Doğruluk: `test-backend-ops test -o MUL_MAT -b MTL0 -p "type_a=q4_0"`; kernel bazlı: `test-backend-ops perf ...` (sonuç satırı, kendinden önceki MUL_MAT satırına ait; araya derleme logları giriyor).
 - Yama ortam değişkenleri: `GGML_METAL_SB` (0 kapalı, 1/yok varsayılan, `s` yalnız skaler, `m` MMA B=2-8), `GGML_METAL_SB_TM` (1|2), `GGML_METAL_SB_R` (skaler satır/simdgroup), `GGML_METAL_MM_MIN` (mat-vec↔mat-mat eşiği, varsayılan 8).
-- xctrace (başarısız, bkz. `raw_results/07_xctrace_notes.txt`): `xcrun xctrace record --instrument 'Metal GPU Counters' ... --launch -- <komut>`; `xctrace export --toc`.
+- xctrace (sayaç vermedi, bkz. `raw_results/07_xctrace_notes.txt`): `xcrun xctrace record --instrument 'Metal GPU Counters' ... --launch -- <komut>`; `xctrace export --toc`. Sayaç için çalışan yol Xcode Metal Debugger: `main_session/TUR1-DOGRULAMA.md` bölüm 19.
 
 ## 6. Çekirdek tasarımı ve önemli ilkeler (ne öğrenildi)
 
 1. **Yarım-bayt → float dönüşümü pahalı.** `float4(uchar4)` ağırlık başına ~4.84 FMA-yuvası. Sihirli sayı: `as_type<half2>(((w >> s) & 0x000F000F) | 0x64006400) - half2(1032)` iki nibble'ı ~2 yuvada tam olarak (n-8) yapar. Mikro-ölçüm 570 → 1374 G ağırlık/s. Bu, ilk dönemin "hesap sınırlı q4" yorumunu çürüttü.
-2. **Okuma yolu bellek sınırlı** (q4_0 B=1: ~250 GB/s, tavan ~254). B=1'de dönüşümü hızlandırmak okumayı hızlandırmaz.
+2. **Okuma yolu bellek sınırlı** (q4_0 B=1: ~250-258 GB/s, tavan 258-264). B=1'de dönüşümü hızlandırmak okumayı hızlandırmaz.
 3. **Mat-mat'te darboğaz x trafiği:** her lane her sütun için x'i yeniden yüklüyorsa (llama.cpp `mul_mv_ext` gibi) ağırlık başına B×4 B önbellek trafiği doğar. Çözüm: lane başına 8 ağırlık (bir 32-bit sözcük), x lane'ler arası bitişik; R satır aynı x'i paylaşır.
 4. **Yazmaç/derleyici duyarlılığı:** R×B birikeç + x yazmaçları büyüyünce B=4-6 ve B>=9'da ani sıçramalar/patlamalar var (B=6'da 10x). R ve B kombinasyonu taranmadan sonuç yorumlanmaz. Yazılım ön-yükleme (prefetch) iyileştirmedi.
 5. **simdgroup_matrix:** lane→eleman eşlemesi `qid=lane/4; fm=(qid&4)+((lane/2)&3); fn=((qid&2)<<1)+((lane&1)<<1)`; lane (fm satırı, fn ve fn+1 sütunu) elemanlarına `thread_elements()[0/1]` ile yazar. Ağırlık karosu A (8 satır × 8 k) doğrudan kayıtta üretilir; B karosu (k × sütun) x'ten. Ölçek blok sonunda satır başına uygulanır (T2 birikeci). B'den bağımsız (8 sütun karosu): B≤8'de düz, B=9-16'da 2 karo.
@@ -122,7 +123,7 @@ Dosyalar: `ggml-metal.metal`, `ggml-metal-device.cpp/.h`, `ggml-metal-ops.cpp`. 
 - ggml'nin gerçek q4_0 düzeni (18 B blok: half d + 16 B qs; ağırlık 0-15 alt nibble, 16-31 üst nibble) çekirdeklerde ele alınır: 2 baytlık hizalı `ushort` yükleri, iki ushort → uint birleştirme, sihirli sayı çıkarımı.
 - Eşik ortam değişkeni (`GGML_METAL_MM_MIN`): kodda zaten var olan `mul_mv_ext` yolunun üst sınırı (sabit 8) ayarlanabilir; yamasız tek başına B=5-8'i 104-143 → ~92 ms'ye çeker.
 - **Yamalanmayanlar:** q6_K lm_head (B=2-3'te eski yoldan 2-3 kez okunur), q4_0 dışı tipler, B>8 (mat-mat 5x taban), `ne00 % 256 != 0` (0.5B taslak modelin K=896'sı), MoE (`mul_mat_id`), batch/yayın boyutları, flash-attention.
-- **Doğrulama:** ggml `test-backend-ops` (CPU referansı) n=2..7 q4_0 k=256/1024 m=16 geçti. Gerçek model boyutlarında sayısal doğruluk (greedy çıktı eşitliği, PPL) **kontrol edilmedi**.
+- **Doğrulama:** ggml `test-backend-ops` (CPU referansı) n=2..7 q4_0 k=256/1024 m=16 geçti. Gerçek model boyutunda doğruluk sonradan kontrol edildi: 7B q4_0 PPL farkı en fazla 0.0005, greedy çıktı bayt bayt aynı (`main_session/TUR1-DOGRULAMA.md` bölüm 1).
 - **Uyarı (AGENTS.md):** llama.cpp deposu tamamen/ağırlıklı yapay zekâ üretimi PR'ları kabul etmiyor ("Private forks are exempt"). Yama yerelde kaldı; upstream'e açılacaksa insan yazarlığı ve anlama gerekir.
 
 ## 8. Bilimsel hijyen: hata günlüğü (neden ihtiyat)
@@ -132,23 +133,27 @@ Dosyalar: `ggml-metal.metal`, `ggml-metal-device.cpp/.h`, `ggml-metal-ops.cpp`. 
 - FMA tepesini 2.76 T FMA/s ölçtüm (8 zincir), gerçek ~3.07. "B=4-8'de 1.35x alt sınır, inemez" iddiası geri çekildi.
 - Projeksiyon (k=2'de 1.30x) iyimserdi: gerçek 1.12x. Çekirdek oranını tüm token süresine uygulamak yanlış (attention, taslak, lm_head payı).
 - `--draft-max` bayrağı "kaldırıldı" mesajına rağmen aynı sonuç verdi: sessiz alias; her bayrak sayıyı değiştirdi mi ayrıca doğrulanmalı (p-min değiştirmedi).
+- Bant tavanını 254.3 GB/s sandım. Isınmalı bağımsız ölçüm 258-264 verdi; eski akış deseni ve soğuk başlangıç düşük ölçmüştü.
+- Etkin bant ve sabit masraf hesaplarında dosya boyutunu okunan bayt saydım; gömme tablosu decode'da okunmuyor. "1.54 ms + 263 GB/s" yanlıştı, doğrusu 1.63 ms + 250.8 GB/s.
+- Yamasız lookup'ta kopyasız metin k=7 tek koşuda 34.1 çıktı; bağımsız tekrarda 40.2 (ceza 0.64x değil 0.75x). Tek koşu artefaktı.
+- NR0 A/B tablolarında "upstream" diye NR0=4'ü yazdım; gerçek upstream değeri 2. Kazanç yüzdeleri yanlış tabana göreydi, "+%38" ve "%63" sayılarının kaydı yok. Yeniden ölçüldü: `main_session/TUR1-DOGRULAMA.md` bölüm 18, eki-3.
 - "Okuma, ölçek yok" varyantı (mv_var MODE 4) okuma yolunda **yavaşladı** (8.70 vs 6.13 ms): derleyici sıralama etkisi; yorumlanmadı.
 
 ## 9. Kurtarma notu: yeniden üretilemeyenler ve belirsizlikler
 
-- **Ana oturumun zip/entropi/CPU ölçümleri:** `compress-test.sh`, `lz4-test.sh`, `zstd-q8.sh`, `cpu-paralel.sh`, `byteplane.py` scratchpad'deydi; içeriklerini ve çıktılarını bu bağlamda **hiç görmedim**. Hiçbiri pakette yok.
+- **Ana oturumun zip/entropi/CPU ölçümleri:** Bu paketi yazan oturum bunları görmemişti. Sonradan eklendi: betikler (`compress-test.sh`, `lz4-test.sh`, `cpu-paralel.sh`, `byteplane.py`) ve sonuç tabloları `main_session/` altında (`OLCUMLER.md`). `zstd-q8.sh` pakette yok.
 - Orijinal `out*.txt` dosyaları ve `.trace` dosyaları yok; `raw_results/` bağlamdan aktarıldı (bazı uzun tabloların yalnızca özeti).
 - Birebir kopyası olmayanlar: `bench8.swift` (bench7'nin `m7_b→m8_b` ve sayaç tabanlı rastgele referans farkı), `bench11.swift` (bench15'in atası: türev modu xorshift m1p3, doğrulama bloğu ve `m3` yok, `kernels9r`+`kernels11` ile koştu), `bench14.swift` (bench8r'nin B≤8 ve m3 kopyası; bench8r'ye birleştirildi), `kernels8/9r/10r` (kernels14 ve `mm8_prefetch_variant.metal.txt` ile ifade edildi; instantiation'lar `gen_batch_instances.py`'de), `bench8r` başlığı sadeleştirildi (kullanılmayan referans kodu atıldı).
 - Örnekleme (instantiation) satırları üreticilerle yeniden üretilir; orijinaller tek tek Python parçalarıyla yazılmıştı. İsimler (`m8_b{B}_r{R}_{...}`, `w_f{F}_g{G}_...`, `v9_...`, `mma_tm{T}_n{N}_m{M}`) bench kodunun beklediği biçimde.
 - `llama.cpp` klonu, derleme dizini ve `bin_base` yok. Yeniden klonlayıp `apply_patch.py` ile yamanabilir.
 - `matrix.sh` içindeki yollar göreli yazıldı (orijinal mutlak scratchpad yoluydu).
 - `sb_q4_0.diff` sahte ağaçta üretildi; bağlam satırları (ops.cpp 2055-2091, device.h 131-135) gerçek metinlerden; device.cpp ve .metal hunk'larının önceki bağlamı yok (git apply'da önce bağlamsız eşleşir). `git apply` ile **denenmedi**. Yetkili yöntem `apply_patch.py`.
-- Doğrulanmamış hipotezler: (1) JSON lookup'ta B≥9'daki 1.4x tuhaflığı kısa taslaklı turlardan geliyor olabilir; (2) JSON k=0 yamasızdaki 41.0 tok/s'nin sebebi bilinmiyor; (3) K-quant yavaşlığı dönüşüm kaynaklı olabilir (ölçülmedi); (4) q4_0 B=3'ün hesap yuvası bütçesini aşması (hesap tahmini, sayaçla doğrulanmadı).
+- Doğrulanmamış hipotezler: (1) JSON lookup'ta B≥9'daki 1.4x tuhaflığı kısa taslaklı turlardan geliyor olabilir; (2) JSON k=0 yamasızdaki 41.0 tok/s'nin sebebi bilinmiyor; (3) K-quant yavaşlığı dönüşüm kaynaklı olabilir: ÇÜRÜTÜLDÜ, sebep çekirdek yapısı (açma hızı bellek sınırının üstünde; satır sayısı ayarı N_R0 ile %8-9 düzeliyor, `TUR1-DOGRULAMA.md` bölüm 6, 11); (4) q4_0 B=3'ün hesap yuvası bütçesini aşması (hesap tahmini, sayaçla doğrulanmadı).
 
 ## 10. Cloud analizi için açık sorular (yönlendirme değil, malzeme)
 
 - B=3 skaler çekirdek neden 1.09x (mikro) yerine 1.57x (gerçek)? Yük dağılımı (ushort yükleri, hizalama), threadgroup sayısı (m=4096'da 256 tg), lm_head q6_K'nın B=3'te 3 kez okunması, attention/diğer op payı.
-- MMA B=4-8 per-op 2.4x vs mikro 1.66x: az threadgroup (m=4096, tm=2 → 64 tg), x yük deseni (`thread_elements` ile 2 skaler yük/lane/kstep), karo tm=1 daha mı iyi tek matriste?
+- MMA B=4-8 per-op 2.4x vs mikro 1.66x: az threadgroup (m=4096, tm=2 → 64 tg), x yük deseni (`thread_elements` ile 2 skaler yük/lane/kstep), karo tm=1 daha mı iyi tek matriste? Kısmi cevap (`main_session/TUR1-DOGRULAMA.md` bölüm 19): çekirdek B'den bağımsız sabit 8 sütunluk iş yapıyor; düşük grup sayısı ek yavaşlık yapıyor (down boyutunda 56 grup). tm1 tek başına çare değil (bölüm 17: tüm adımda %0-4).
 - Dönüşüm/FMA bütçesi: q4 B=2-3 için ağırlık başına ~7 yuva "bedava" (bellek süresi 2.28 ps/ağırlık × 3.07 T/s). Dönüşüm + B FMA bunu aşıyor mu? Hangi işlem sayısı azaltılabilir (ofset ertelemesi işe yaramadı; LUT yaramadı; half birikim +%4)?
 - x'i simdgroup başına threadgroup belleğinde paylaşmak, ağırlığı yeniden paketlemek (q4_0 → nibble çifti düzeni, yükleme sırasında bir kez), B=9-16 için daha ucuz MMA (mevcut 3.1x vs llama.cpp 5.1x).
 - Spekülatif tarafında taslak maliyeti (token başına 3.4-4.2 ms, 0.5B bağımsız 3.16 ms) ve yield; kısa taslaklı lookup.

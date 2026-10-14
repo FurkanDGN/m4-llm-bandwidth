@@ -1,0 +1,50 @@
+kilitler alindi, bekleme 386 sn
+tur=0 V=0 p=4 26.190
+tur=0 V=0 p=5 32.530
+tur=0 V=1 p=4 26.611
+tur=0 V=1 p=5 26.617
+tur=1 V=1 p=4 25.997
+tur=1 V=1 p=5 26.452
+tur=1 V=0 p=4 26.356
+tur=1 V=0 p=5 26.602
+tur=2 V=0 p=4 26.325
+tur=2 V=0 p=5 26.554
+tur=2 V=1 p=4 26.352
+tur=2 V=1 p=5 28.541
+tur=3 V=1 p=4 30.620
+tur=3 V=1 p=5 26.643
+tur=3 V=0 p=4 26.474
+tur=3 V=0 p=5 26.598
+tur=4 V=0 p=4 26.394
+tur=4 V=0 p=5 28.030
+tur=4 V=1 p=4 26.515
+tur=4 V=1 p=5 26.440
+tur=5 V=1 p=4 26.361
+tur=5 V=1 p=5 26.571
+tur=5 V=0 p=4 26.492
+tur=5 V=0 p=5 26.758
+tur=6 V=0 p=4 26.393
+tur=6 V=0 p=5 26.519
+tur=6 V=1 p=4 26.177
+tur=6 V=1 p=5 26.502
+tur=7 V=1 p=4 26.278
+tur=7 V=1 p=5 26.303
+tur=7 V=0 p=4 26.331
+tur=7 V=0 p=5 26.395
+tur=8 V=0 p=4 26.366
+tur=8 V=0 p=5 26.476
+tur=8 V=1 p=4 26.235
+tur=8 V=1 p=5 26.337
+tur=9 V=1 p=4 26.141
+tur=9 V=1 p=5 26.260
+tur=9 V=0 p=4 26.240
+tur=9 V=0 p=5 26.444
+tur=10 V=0 p=4 26.360
+tur=10 V=0 p=5 26.894
+tur=10 V=1 p=4 26.402
+tur=10 V=1 p=5 26.337
+37.7 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+4.1 /Applications/Stats.app/Contents/MacOS/Stats
+2.5 /System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter
+2.5 ~/.local/bin/claude
+kilitler birakildi, pencere 439 sn

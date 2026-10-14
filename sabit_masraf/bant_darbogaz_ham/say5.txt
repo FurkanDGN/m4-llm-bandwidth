@@ -1,0 +1,17 @@
+05 upstream_kapali: dugum=821 gpu_cagrisi=557
+05 bizim_kapali: dugum=821 gpu_cagrisi=508
+05 ekle: dugum=821 gpu_cagrisi=389
+05 ekle_glu: dugum=821 gpu_cagrisi=341
+05 ekle_glu_qkv: dugum=821 gpu_cagrisi=293
+05 ekle_glu_qkv_ropek: dugum=821 gpu_cagrisi=270
+05 ekle_glu_qkv_ropek_qk: dugum=821 gpu_cagrisi=247
+05 ekle_glu_qkv_ropek_qk_v: dugum=821 gpu_cagrisi=224
+7 upstream_kapali: dugum=957 gpu_cagrisi=649
+7 bizim_kapali: dugum=957 gpu_cagrisi=592
+7 ekle: dugum=957 gpu_cagrisi=453
+7 ekle_glu: dugum=957 gpu_cagrisi=397
+7 ekle_glu_qkv: dugum=957 gpu_cagrisi=341
+7 ekle_glu_qkv_ropek: dugum=957 gpu_cagrisi=313
+7 ekle_glu_qkv_ropek_qk: dugum=957 gpu_cagrisi=285
+7 ekle_glu_qkv_ropek_qk_v: dugum=957 gpu_cagrisi=257
+SAY_BITTI

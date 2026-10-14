@@ -1,0 +1,11 @@
+p=3 kapali    ort 24.961 ms  fark +0.000 ms  tur 27.41 23.74 23.73
+p=3 glu_fr1   ort 27.076 ms  fark +2.115 ms  tur 26.67 27.27 27.28
+p=3 glu_fr2   ort 25.613 ms  fark +0.652 ms  tur 25.33 25.26 26.25
+p=3 glu_fr3   ort 28.416 ms  fark +3.454 ms  tur 27.86 27.70 29.69
+p=3 glu_fr4   ort 32.394 ms  fark +7.433 ms  tur 31.26 33.20 32.72
+p=2 kapali    ort 20.093 ms  fark +0.000 ms  tur 22.78 18.78 18.72
+p=2 glu_fr1   ort 19.626 ms  fark -0.467 ms  tur 19.59 19.64 19.64
+p=2 glu_fr2   ort 18.570 ms  fark -1.523 ms  tur 18.56 18.56 18.58
+p=2 glu_fr3   ort 20.919 ms  fark +0.826 ms  tur 20.94 20.87 20.95
+p=2 glu_fr4   ort 22.493 ms  fark +2.400 ms  tur 22.69 22.38 22.40
+GLU_BITTI

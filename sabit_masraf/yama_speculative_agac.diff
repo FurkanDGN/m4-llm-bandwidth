@@ -1,0 +1,208 @@
+diff --git a/examples/speculative/speculative.cpp b/examples/speculative/speculative.cpp
+index f7fa5e306..ff7b6875e 100644
+--- a/examples/speculative/speculative.cpp
++++ b/examples/speculative/speculative.cpp
+@@ -59,6 +59,7 @@ int main(int argc, char ** argv) {
+ 
+     // probability threshold for splitting a draft branch (only for n_seq_dft > 1)
+     const float p_draft_split = params.speculative.draft.p_split;
++    const float p_draft_min = params.speculative.draft.p_min;
+ 
+     std::default_random_engine rng(params.sampling.seed == LLAMA_DEFAULT_SEED ? std::random_device()() : params.sampling.seed);
+     std::uniform_real_distribution<> u_dist;
+@@ -74,6 +75,11 @@ int main(int argc, char ** argv) {
+     llama_context * ctx_dft = NULL;
+ 
+     // load the target model
++    // branches are copied with seq_cp, which needs all sequences in one KV stream
++    if (n_seq_dft > 1) {
++        params.kv_unified = true;
++    }
++
+     auto llama_init_tgt = common_init_from_params(params);
+ 
+     model_tgt = llama_init_tgt->model();
+@@ -210,15 +216,28 @@ int main(int argc, char ** argv) {
+     // draft sequence data
+     std::vector<seq_draft> drafts(n_seq_dft);
+ 
++    // the branch split compares candidate probabilities, which greedy sampling leaves at zero
++    common_params_sampling sparams_dft = params.sampling;
++    if (n_seq_dft > 1) {
++        sparams_dft.temp  = 1.0f;
++        sparams_dft.top_k = 10;
++        sparams_dft.top_p = 1.0f;
++        sparams_dft.min_p = 0.0f;
++    }
++
+     for (int s = 0; s < n_seq_dft; ++s) {
+         // allocate llama_sampler for each draft sequence
+-        drafts[s].smpl = common_sampler_init(model_dft, params.sampling);
++        drafts[s].smpl = common_sampler_init(model_dft, sparams_dft);
+     }
+ 
++    struct common_sampler * smpl_dft = common_sampler_init(model_dft, sparams_dft);
++
+     llama_batch batch_dft = llama_batch_init(llama_n_batch(ctx_dft), 0, 1);
+     llama_batch batch_tgt = llama_batch_init(llama_n_batch(ctx_tgt), 0, n_seq_dft);
+ 
+     const auto t_dec_start = ggml_time_us();
++    llama_token dft_pending = -1; int dft_pending_pos = -1; const bool skip_last = std::getenv("SPEC_SKIP_LAST") != nullptr; const bool dokum = std::getenv("SPEC_DOKUM") != nullptr;
++    int64_t t_dft_dec = 0, t_tgt_dec = 0, t_tgt_smp = 0, t_dft_smp = 0, t_kv = 0; int n_step = 0, n_dft_dec = 0;
+ 
+     // sample from the last token of the prompt
+     drafts[0].i_batch_tgt.resize(1);
+@@ -254,7 +273,7 @@ int main(int argc, char ** argv) {
+                 bool accept = false;
+                 if (params.sampling.temp > 0) {
+                     // stochastic verification
+-                    common_sampler_sample(smpl, ctx_tgt, drafts[s_keep].i_batch_tgt[i_dft], true);
++                    { auto t0 = ggml_time_us(); common_sampler_sample(smpl, ctx_tgt, drafts[s_keep].i_batch_tgt[i_dft], true); t_tgt_smp += ggml_time_us() - t0; }
+ 
+                     auto & dist_tgt = *common_sampler_get_candidates(smpl, true);
+ 
+@@ -383,7 +402,7 @@ int main(int argc, char ** argv) {
+ 
+                     // sample from the target model
+                     LOG_DBG("sampling target: s_keep = %3d, i_dft = %3d, i_batch_tgt = %3d\n", s_keep, i_dft, drafts[s_keep].i_batch_tgt[i_dft]);
+-                    token_id = common_sampler_sample(smpl, ctx_tgt, drafts[s_keep].i_batch_tgt[i_dft]);
++                    { auto t0 = ggml_time_us(); token_id = common_sampler_sample(smpl, ctx_tgt, drafts[s_keep].i_batch_tgt[i_dft]); t_tgt_smp += ggml_time_us() - t0; }
+ 
+                     common_sampler_accept(smpl, token_id, true);
+ 
+@@ -436,6 +455,7 @@ int main(int argc, char ** argv) {
+             {
+                 LOG_DBG("keeping sequence %d, n_past_tgt = %d, n_past_dft = %d\n", s_keep, n_past_tgt, n_past_dft);
+ 
++                auto t0kv = ggml_time_us();
+                 llama_memory_seq_keep(mem_dft, s_keep);
+                 llama_memory_seq_cp  (mem_dft, s_keep, 0, -1, -1);
+                 llama_memory_seq_keep(mem_dft, 0);
+@@ -444,6 +464,7 @@ int main(int argc, char ** argv) {
+                 llama_memory_seq_keep(mem_tgt, s_keep);
+                 llama_memory_seq_cp  (mem_tgt, s_keep, 0, -1, -1);
+                 llama_memory_seq_keep(mem_tgt, 0);
++                t_kv += ggml_time_us() - t0kv;
+             }
+ 
+             for (int s = 0; s < n_seq_dft; ++s) {
+@@ -458,11 +479,15 @@ int main(int argc, char ** argv) {
+             drafts[0].i_batch_tgt.push_back(0);
+ 
+             common_batch_clear(batch_dft);
++            if (dft_pending >= 0 && dft_pending_pos < n_past_dft) {
++                common_batch_add(batch_dft, dft_pending, dft_pending_pos, { 0 }, false);
++            }
++            dft_pending = -1;
+             common_batch_add  (batch_dft, token_id, n_past_dft, { 0 }, true);
+ 
+-            llama_memory_seq_rm(mem_dft, 0, n_past_dft, -1);
+-            // LOG_DBG("dft batch: %s\n", LOG_BATCH_TOSTR_PRETTY(ctx_dft, batch_dft).c_str());
+-            llama_decode(ctx_dft, batch_dft);
++            { auto t0 = ggml_time_us(); llama_memory_seq_rm(mem_dft, 0, n_past_dft, -1); t_kv += ggml_time_us() - t0; }
++            { auto t0 = ggml_time_us(); llama_decode(ctx_dft, batch_dft); if (dokum) llama_synchronize(ctx_dft); t_dft_dec += ggml_time_us() - t0; ++n_dft_dec; }
++            ++n_step;
+ 
+             ++n_past_dft;
+         }
+@@ -474,7 +499,7 @@ int main(int argc, char ** argv) {
+         if (drafts[0].smpl) {
+             common_sampler_free(drafts[0].smpl);
+         }
+-        drafts[0].smpl = common_sampler_clone(smpl);
++        drafts[0].smpl = common_sampler_clone(n_seq_dft > 1 ? smpl_dft : smpl);
+ 
+         int n_seq_cur  = 1;
+         int n_past_cur = n_past_dft;
+@@ -485,7 +510,7 @@ int main(int argc, char ** argv) {
+         }
+         drafts[0].active      = true;
+         drafts[0].drafting    = true;
+-        drafts[0].i_batch_dft = 0;
++        drafts[0].i_batch_dft = batch_dft.n_tokens - 1;
+ 
+         common_batch_clear(batch_tgt);
+         common_batch_add  (batch_tgt, drafts[0].tokens[0], n_past_tgt, { 0 }, true);
+@@ -503,9 +528,39 @@ int main(int argc, char ** argv) {
+                     continue;
+                 }
+ 
+-                common_sampler_sample(drafts[s].smpl, ctx_dft, drafts[s].i_batch_dft, true);
++                { auto t0 = ggml_time_us(); common_sampler_sample(drafts[s].smpl, ctx_dft, drafts[s].i_batch_dft, true); t_dft_smp += ggml_time_us() - t0; }
+ 
+-                const auto * cur_p = common_sampler_get_candidates(drafts[s].smpl, true);
++                auto * cur_p = common_sampler_get_candidates(drafts[s].smpl, false);
++
++                if (n_seq_dft > 1) {
++                    std::sort(cur_p->data, cur_p->data + cur_p->size, [](const llama_token_data & x, const llama_token_data & y) {
++                        return x.logit > y.logit;
++                    });
++                    float sum = 0.0f;
++                    for (size_t c = 0; c < cur_p->size; ++c) {
++                        cur_p->data[c].p = expf(cur_p->data[c].logit - cur_p->data[0].logit);
++                        sum += cur_p->data[c].p;
++                    }
++                    for (size_t c = 0; c < cur_p->size; ++c) {
++                        cur_p->data[c].p /= sum;
++                    }
++                    cur_p->sorted = true;
++                } else {
++                    cur_p = common_sampler_get_candidates(drafts[s].smpl, true);
++                    if (p_draft_min > 0.0f && i > 0) {
++                        const float * lg = llama_get_logits_ith(ctx_dft, drafts[s].i_batch_dft);
++                        const int nv = llama_vocab_n_tokens(llama_model_get_vocab(model_dft));
++                        float mx = lg[0];
++                        for (int c = 1; c < nv; ++c) if (lg[c] > mx) mx = lg[c];
++                        float sum = 0.0f;
++                        for (int c = 0; c < nv; ++c) sum += expf(lg[c] - mx);
++                        if (std::getenv("SPEC_PDBG")) fprintf(stderr, "ptop %d %.3f\n", i, 1.0f/sum);
++                        if (1.0f / sum < p_draft_min) {
++                            drafts[s].drafting = false;
++                            continue;
++                        }
++                    }
++                }
+ 
+                 for (int k = 0; k < std::min(n_seq_dft + 3, (int) cur_p->size); ++k) {
+                     LOG_DBG(" - draft candidate %3d for seq %3d, pos %3d: %6d (%8.3f) '%s'\n",
+@@ -590,7 +645,12 @@ int main(int argc, char ** argv) {
+             }
+ 
+             // evaluate the drafted tokens on the draft model
+-            llama_decode(ctx_dft, batch_dft);
++            if (skip_last && n_seq_dft == 1 && batch_tgt.n_tokens > n_draft) {
++                dft_pending = batch_dft.token[0]; dft_pending_pos = batch_dft.pos[0];
++                ++n_past_cur; ++n_drafted;
++                break;
++            }
++            { auto t0 = ggml_time_us(); llama_decode(ctx_dft, batch_dft); if (dokum) llama_synchronize(ctx_dft); t_dft_dec += ggml_time_us() - t0; ++n_dft_dec; }
+             ++n_past_cur;
+             ++n_drafted;
+ 
+@@ -607,7 +667,7 @@ int main(int argc, char ** argv) {
+             }
+ 
+             // LOG_DBG("target batch: %s\n", LOG_BATCH_TOSTR_PRETTY(ctx_tgt, batch_tgt).c_str());
+-            llama_decode(ctx_tgt, batch_tgt);
++            { auto t0 = ggml_time_us(); llama_decode(ctx_tgt, batch_tgt); if (dokum) llama_synchronize(ctx_tgt); t_tgt_dec += ggml_time_us() - t0; }
+             ++n_past_tgt;
+         }
+ 
+@@ -635,6 +695,9 @@ int main(int argc, char ** argv) {
+     LOG_INF("n_drafted = %d\n", n_drafted);
+     LOG_INF("n_accept  = %d\n", n_accept);
+     LOG_INF("accept    = %.3f%%\n", 100.0f * n_accept / n_drafted);
++    LOG_INF("dokum: n_step=%d toplam=%.1f ms tgt_dec=%.1f dft_dec=%.1f (n=%d) tgt_smp=%.1f dft_smp=%.1f kv=%.1f diger=%.1f\n", n_step,
++        (t_dec_end - t_dec_start)/1e3, t_tgt_dec/1e3, t_dft_dec/1e3, n_dft_dec, t_tgt_smp/1e3, t_dft_smp/1e3, t_kv/1e3,
++        ((t_dec_end - t_dec_start) - t_tgt_dec - t_dft_dec - t_tgt_smp - t_dft_smp - t_kv)/1e3);
+ 
+     LOG_INF("\n");
+     LOG_INF("draft:\n\n");
+@@ -646,6 +709,7 @@ int main(int argc, char ** argv) {
+     common_perf_print(ctx_tgt, smpl);
+ 
+     common_sampler_free(smpl);
++    common_sampler_free(smpl_dft);
+     for (int s = 0; s < n_seq_dft; ++s) {
+         common_sampler_free(drafts[s].smpl);
+     }

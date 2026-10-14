@@ -1,0 +1,4 @@
+model 15  varsayilan     ort 4.9433 ms  tur: 4.972 4.923 4.935  (tabana gore +0.0000 ms, tabandan hizli 0/3 tur)
+model 15  n128           ort 4.9647 ms  tur: 4.975 4.971 4.949  (tabana gore +0.0214 ms, tabandan hizli 0/3 tur)
+model 15  n192           ort 4.9599 ms  tur: 4.947 4.943 4.989  (tabana gore +0.0166 ms, tabandan hizli 1/3 tur)
+FAKTOR_BITTI

@@ -1,0 +1,4 @@
+sync_k1_r1: 0.02.217.927 I dokum: n_step=59 toplam=1425.4 ms tgt_dec=1079.3 dft_dec=303.2 (n=117) tgt_smp=28.2 dft_smp=3.7 kv=5.7 diger=5.3
+sync_k4_r1: 0.02.244.070 I dokum: n_step=36 toplam=1456.1 ms tgt_dec=951.4 dft_dec=460.9 (n=176) tgt_smp=25.2 dft_smp=11.1 kv=4.0 diger=3.5
+skip1_k1_r1: 0.02.119.129 I dokum: n_step=59 toplam=1324.6 ms tgt_dec=1080.2 dft_dec=206.2 (n=59) tgt_smp=24.6 dft_smp=3.6 kv=5.7 diger=4.2
+skip1_k4_r1: 0.02.177.136 I dokum: n_step=36 toplam=1386.4 ms tgt_dec=956.4 dft_dec=388.7 (n=141) tgt_smp=24.4 dft_smp=10.7 kv=3.5 diger=2.7

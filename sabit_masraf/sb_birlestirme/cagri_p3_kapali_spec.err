@@ -1,0 +1,111 @@
+0.00.029.853 I common_init_result: fitting params to device memory ...
+0.00.029.856 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=28 birlesen_ekle=139
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=28 birlesen_ekle=139
+GGML_METAL_FUSE_STATS: dugum=957 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=28 birlesen_ekle=139
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.206.685 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=28 birlesen_ekle=139
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=28 birlesen_ekle=139
+GGML_METAL_FUSE_STATS: dugum=957 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=28 birlesen_ekle=139
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.675.497 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+GGML_METAL_FUSE_STATS: dugum=957 sutun=2 birlesen_glu=1 birlesen_ekle=1
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=2 gpu_cagrisi=505 bariyer=363
+0.00.726.318 I common_init_result: fitting params to device memory ...
+0.00.726.326 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=24 birlesen_ekle=119
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=24 birlesen_ekle=119
+GGML_METAL_FUSE_STATS: dugum=821 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=24 birlesen_ekle=119
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.895.391 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=24 birlesen_ekle=119
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=24 birlesen_ekle=119
+GGML_METAL_FUSE_STATS: dugum=821 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=24 birlesen_ekle=119
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.958.957 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+GGML_METAL_FUSE_STATS: dugum=821 sutun=2 birlesen_glu=1 birlesen_ekle=1
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=2 gpu_cagrisi=436 bariyer=313
+GGML_METAL_FUSE_STATS: dugum=957 sutun=3 birlesen_glu=1 birlesen_ekle=1
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=505 bariyer=363
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=28 birlesen_ekle=139
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=1 gpu_cagrisi=257 bariyer=254
+GGML_METAL_FUSE_STATS: dugum=821 sutun=4 birlesen_glu=1 birlesen_ekle=1
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=4 gpu_cagrisi=436 bariyer=313
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=24 birlesen_ekle=119
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: dugum=957 sutun=3 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=224 bariyer=220
+0.01.367.339 I encoded    4 tokens in    0.030 seconds, speed:  132.411 t/s
+0.01.367.339 I decoded   25 tokens in    0.362 seconds, speed:   68.994 t/s
+0.01.367.340 I 
+0.01.367.340 I n_draft   = 2
+0.01.367.340 I n_predict = 25
+0.01.367.340 I n_drafted = 22
+0.01.367.340 I n_accept  = 13
+0.01.367.340 I accept    = 59.091%
+0.01.367.340 I 
+0.01.367.341 I draft:
+
+0.01.367.344 I 
+0.01.367.344 I target:
+
+0.01.367.346 I common_perf_print:    sampling time =       2.03 ms
+0.01.367.346 I common_perf_print:    samplers time =       1.07 ms /    25 tokens
+0.01.367.346 I common_perf_print:        load time =     541.76 ms
+0.01.367.347 I common_perf_print: prompt eval time =     295.32 ms /    37 tokens (    7.98 ms per token,   125.29 tokens per second)
+0.01.367.348 I common_perf_print:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+0.01.367.348 I common_perf_print:       total time =     641.05 ms /    38 tokens
+0.01.367.348 I common_perf_print: unaccounted time =     343.69 ms /  53.6 %      (total - sampling - prompt eval - eval) / (total)
+0.01.367.348 I common_perf_print:    graphs reused =         10

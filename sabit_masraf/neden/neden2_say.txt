@@ -1,0 +1,8 @@
+orijinal: dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+t_ekle: dugum=957 sutun=3 gpu_cagrisi=592 bariyer=451
+t_glu: dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+t_qkv: dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+t_ropek: dugum=957 sutun=3 gpu_cagrisi=564 bariyer=393
+t_ropek_qk: dugum=957 sutun=3 gpu_cagrisi=536 bariyer=365
+t_ropek_v: dugum=957 sutun=3 gpu_cagrisi=536 bariyer=393
+SAYI_BITTI

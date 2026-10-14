@@ -1,0 +1,5 @@
+K=3 basladi
+K=3 bitti
+K=4 basladi
+K=4 bitti
+K5_BITTI

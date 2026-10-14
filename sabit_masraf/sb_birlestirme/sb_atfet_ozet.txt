@@ -1,0 +1,6 @@
+kapali       ort 23.589 ms  fark +0.000 ms  tur 23.77 23.74 23.26
+hepsi        ort 27.510 ms  fark +3.921 ms  tur 27.62 27.46 27.45
+glusuz       ort 23.156 ms  fark -0.433 ms  tur 23.29 23.16 23.03
+qkvsiz       ort 27.372 ms  fark +3.783 ms  tur 27.63 27.18 27.31
+yalniz_ekle  ort 22.845 ms  fark -0.744 ms  tur 22.79 22.88 22.87
+ATFET_BITTI

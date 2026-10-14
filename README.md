@@ -23,5 +23,7 @@ Apple M4 Pro (24 GB, 273 GB/s) üzerinde, llama.cpp/Metal ile LLM decode hızın
 - `scripts/` — istem üreticileri, tarama betikleri, ölçüm zincirleri
 - `main_session/` — zip/entropi/CPU açma ölçümleri (script + sonuç); `TUR1-DOGRULAMA.md` — bağımsız tekrar + yama doğruluk kanıtı + düzeltilmiş sabit-masraf modeli
 - `raw_results/` — ham çıktılar
+- `OPTIMIZASYON-LISTESI.md` — ikinci seri: sabit masraf ayrıştırması, tahminli üretme, aktivasyon seyrekliği (down/up satır atlama, ağırlıklı seçim); her madde ölçüm ve ders notlarıyla
+- `sabit_masraf/` — ikinci serinin yamaları (`yama.diff`, `yama_seyrek_tam.diff`), ölçüm betikleri ve CSV'leri (`seyreklik/` altında seyrek FFN deneyleri)
 
 Tüm Metal/Swift dosyaları derleme kontrolünden geçmiştir; ölçüm programları `swiftc` ile derlenip kernel dosyası argümanıyla çalıştırılır (ayrıntı KNOWHOW.md'de).

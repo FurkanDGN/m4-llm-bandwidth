@@ -1,0 +1,12 @@
+== 05 fuse=0
+GGML_METAL_TIMING: graph_compute ortalama 405.8 us (821 dugum)
+GGML_METAL_TIMING: graph_compute ortalama 402.1 us (821 dugum)
+GGML_METAL_TIMING: graph_compute ortalama 394.5 us (821 dugum)
+== 05 fuse=1
+GGML_METAL_TIMING: graph_compute ortalama 331.7 us (821 dugum)
+GGML_METAL_TIMING: graph_compute ortalama 326.7 us (821 dugum)
+GGML_METAL_TIMING: graph_compute ortalama 329.6 us (821 dugum)
+== 7 fuse=0
+GGML_METAL_TIMING: graph_compute ortalama 633.7 us (957 dugum)
+== 7 fuse=1
+GGML_METAL_TIMING: graph_compute ortalama 655.9 us (957 dugum)

@@ -1,0 +1,7 @@
+model 05  varsayilan     ort 2.5481 ms  tur: 2.620 2.503 2.508 2.627 2.483  (tabana gore +0.0000 ms, tabandan hizli 0/5 tur)
+model 05  n64            ort 2.5776 ms  tur: 2.549 2.548 2.574 2.713 2.503  (tabana gore +0.0295 ms, tabandan hizli 1/5 tur)
+model 05  n96            ort 2.5398 ms  tur: 2.473 2.604 2.518 2.625 2.478  (tabana gore -0.0083 ms, tabandan hizli 3/5 tur)
+model 05  n128           ort 2.5159 ms  tur: 2.499 2.485 2.498 2.473 2.624  (tabana gore -0.0322 ms, tabandan hizli 4/5 tur)
+model 05  n160           ort 2.5467 ms  tur: 2.490 2.520 2.626 2.468 2.630  (tabana gore -0.0014 ms, tabandan hizli 2/5 tur)
+model 05  n192           ort 2.6173 ms  tur: 2.642 2.640 2.656 2.662 2.486  (tabana gore +0.0692 ms, tabandan hizli 0/5 tur)
+FAKTOR_BITTI

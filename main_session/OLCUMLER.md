@@ -36,7 +36,7 @@ q4_0 dosyası 12 parça, tüm parçalar aynı anda açılıyor, 3 tekrarın en i
 - zstd: 10.0 GB/s
 - lz4: 13.9 GB/s
 
-Kıyas: q4_0 decode'un ağırlık okuma hızı ~191 GB/s (llama-bench tg128 türevi). CPU açma 14-19 kat yetersiz.
+Kıyas: 1.5B q4_0 decode her token için 0.935 GB okuyor (gömme tablosu okunmuyor). Bu, token başına ortalama ~169 GB/s, okuma sırasında ~249 GB/s eder. CPU açma (10.0-13.9 GB/s) 12-25 kat yetersiz. İlk yazımdaki "~191 GB/s, 14-19 kat" dosya boyutuyla hesaplanmıştı, yanlıştı.
 
 ## 4. Bağlamdaki diğer ana oturum sayıları
 

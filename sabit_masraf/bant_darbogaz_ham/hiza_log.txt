@@ -1,0 +1,22 @@
+FAZ 1: bariyer sayisi (3 sutunlu hedef grafi)
+BARIYER a32_kapali: dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+BARIYER a32_acik: dugum=957 sutun=3 gpu_cagrisi=508 bariyer=395
+BARIYER a4096_kapali: dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+BARIYER a4096_acik: dugum=957 sutun=3 gpu_cagrisi=508 bariyer=365
+FAZ 2: tahminli uretme k=2, 5 tur
+SPEC_BITTI
+FAZ 3: tek token, 5 tur
+model 05  a32_kapali     ort 2.9694 ms  tur: 2.947 2.992 2.970 2.979 2.959  (tabana gore +0.0000 ms, tabandan hizli 0/5 tur)
+model 05  a32_acik       ort 2.5459 ms  tur: 2.521 2.471 2.616 2.620 2.501  (tabana gore -0.4235 ms, tabandan hizli 5/5 tur)
+model 05  a4096_kapali   ort 3.0042 ms  tur: 2.914 3.138 3.011 2.981 2.977  (tabana gore +0.0348 ms, tabandan hizli 1/5 tur)
+model 05  a4096_acik     ort 2.5828 ms  tur: 2.631 2.637 2.497 2.496 2.652  (tabana gore -0.3866 ms, tabandan hizli 5/5 tur)
+model 15  a32_kapali     ort 5.4803 ms  tur: 5.438 5.536 5.447 5.442 5.537  (tabana gore +0.0000 ms, tabandan hizli 0/5 tur)
+model 15  a32_acik       ort 5.0366 ms  tur: 5.060 4.980 4.935 4.943 5.264  (tabana gore -0.4437 ms, tabandan hizli 5/5 tur)
+model 15  a4096_kapali   ort 5.5121 ms  tur: 5.452 5.409 5.430 5.425 5.845  (tabana gore +0.0317 ms, tabandan hizli 3/5 tur)
+model 15  a4096_acik     ort 5.0419 ms  tur: 5.036 5.023 4.940 4.943 5.267  (tabana gore -0.4385 ms, tabandan hizli 5/5 tur)
+model 7   a32_kapali     ort 18.4889 ms  tur: 18.460 18.385 18.376 18.391 18.833  (tabana gore +0.0000 ms, tabandan hizli 0/5 tur)
+model 7   a32_acik       ort 17.9087 ms  tur: 17.813 18.007 17.750 17.751 18.222  (tabana gore -0.5802 ms, tabandan hizli 5/5 tur)
+model 7   a4096_kapali   ort 18.5595 ms  tur: 18.602 18.390 18.397 18.363 19.046  (tabana gore +0.0706 ms, tabandan hizli 1/5 tur)
+model 7   a4096_acik     ort 17.9192 ms  tur: 17.833 17.769 17.750 17.784 18.460  (tabana gore -0.5697 ms, tabandan hizli 5/5 tur)
+FAKTOR_BITTI
+HIZA_BITTI

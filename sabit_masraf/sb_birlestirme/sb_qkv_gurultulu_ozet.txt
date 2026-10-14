@@ -1,0 +1,8 @@
+p=2 kapali    ort 19.545 ms  fark +0.000 ms (%+0.0)  kapaliya gore hizli 0/6  tur 18.75 20.36 20.00 18.62 20.48 19.06
+p=2 ekle      ort 19.141 ms  fark -0.404 ms (%-2.1)  kapaliya gore hizli 4/6  tur 18.38 19.59 20.25 18.38 19.02 19.22
+p=2 ekle_qkv  ort 19.869 ms  fark +0.324 ms (%+1.7)  kapaliya gore hizli 4/6  tur 18.18 22.04 19.85 21.28 19.24 18.62
+p=2 qkv ek etkisi (ekle_qkv - ekle): +0.728 ms, qkv'li hizli 3/6 tur
+p=3 kapali    ort 23.991 ms  fark +0.000 ms (%+0.0)  kapaliya gore hizli 0/6  tur 23.29 23.62 25.38 23.21 24.21 24.23
+p=3 ekle      ort 23.099 ms  fark -0.892 ms (%-3.7)  kapaliya gore hizli 6/6  tur 22.82 22.79 23.03 22.87 23.31 23.76
+p=3 ekle_qkv  ort 23.835 ms  fark -0.156 ms (%-0.7)  kapaliya gore hizli 4/6  tur 22.88 23.18 23.22 23.17 25.61 24.95
+p=3 qkv ek etkisi (ekle_qkv - ekle): +0.736 ms, qkv'li hizli 0/6 tur

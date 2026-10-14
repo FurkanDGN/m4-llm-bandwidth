@@ -1,0 +1,9 @@
+~/claude-scratch/bant-darbogaz/say_05_on.err: adim sayisi 8 | son adim GPU cagrisi 470 | eszamanli isaretli 140 | bariyerli 330
+  MUL_MAT 165, ADD 116, RMS_NORM 48, ROPE 46, SET_ROWS 46, GLU 24, FLASH_ATTN_EXT 23, GET_ROWS 2
+~/claude-scratch/bant-darbogaz/say_05_off.err: adim sayisi 8 | son adim GPU cagrisi 518 | eszamanli isaretli 140 | bariyerli 378
+  MUL_MAT 165, ADD 116, RMS_NORM 48, MUL 48, ROPE 46, SET_ROWS 46, GLU 24, FLASH_ATTN_EXT 23, GET_ROWS 2
+~/claude-scratch/bant-darbogaz/say_7_on.err: adim sayisi 8 | son adim GPU cagrisi 550 | eszamanli isaretli 165 | bariyerli 385
+  MUL_MAT 193, ADD 136, RMS_NORM 56, ROPE 54, SET_ROWS 54, GLU 28, FLASH_ATTN_EXT 27, GET_ROWS 2
+~/claude-scratch/bant-darbogaz/say_7_off.err: adim sayisi 8 | son adim GPU cagrisi 606 | eszamanli isaretli 165 | bariyerli 441
+  MUL_MAT 193, ADD 136, RMS_NORM 56, MUL 56, ROPE 54, SET_ROWS 54, GLU 28, FLASH_ATTN_EXT 27, GET_ROWS 2
+BITTI

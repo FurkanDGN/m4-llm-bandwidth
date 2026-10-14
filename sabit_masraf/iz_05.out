@@ -1,0 +1,8 @@
+kayit_cikis=0
+export_cikis=0
+toplam satır 7471, llama-bench Compute 4618
+pencere: 6.318 s, GPU compute meşgul: 4.701 s, boşluk: 1.618 s (25.6%)
+encoder aralığı sayısı: 4618, ortalama süre: 1.018 ms
+boşluk sayısı: 4617, en büyük 5: ['2.33 ms', '2.25 ms', '2.14 ms', '2.12 ms', '1.74 ms']
+boşluk medyanı: 325.6 µs, toplamı: 1617.9 ms
+BITTI

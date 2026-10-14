@@ -1,0 +1,117 @@
+diff --git a/ggml/src/ggml-metal/ggml-metal-context.m b/ggml/src/ggml-metal/ggml-metal-context.m
+index 32d97cd5d..d34f14e0f 100644
+--- a/ggml/src/ggml-metal/ggml-metal-context.m
++++ b/ggml/src/ggml-metal/ggml-metal-context.m
+@@ -442,7 +442,8 @@ enum ggml_status ggml_metal_graph_compute(ggml_metal_t ctx, struct ggml_cgraph *
+     }
+ 
+     // number of nodes encoded by the main thread (empirically determined)
+-    const int n_main = MAX(64, 0.1*gf->n_nodes);
++    const char * n_main_s = getenv("GGML_METAL_N_MAIN");
++    const int n_main = n_main_s ? atoi(n_main_s) : MAX(64, 0.1*gf->n_nodes);
+ 
+     // number of threads in addition to the main thread
+     const int n_cb = ctx->n_cb;
+@@ -661,6 +662,13 @@ ggml_metal_event_t ggml_metal_get_ev_cpy(ggml_metal_t ctx) {
+ }
+ 
+ void ggml_metal_set_n_cb(ggml_metal_t ctx, int n_cb) {
++    {
++        const char * n_cb_s = getenv("GGML_METAL_N_CB");
++        if (n_cb_s) {
++            n_cb = atoi(n_cb_s);
++        }
++    }
++
+     if (ctx->n_cb != n_cb) {
+         ctx->n_cb = MIN(n_cb, GGML_METAL_MAX_COMMAND_BUFFERS);
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal-device.h b/ggml/src/ggml-metal/ggml-metal-device.h
+index d465f31c0..2217785dd 100644
+--- a/ggml/src/ggml-metal/ggml-metal-device.h
++++ b/ggml/src/ggml-metal/ggml-metal-device.h
+@@ -85,6 +85,8 @@ void ggml_metal_encoder_set_buffer(ggml_metal_encoder_t encoder, struct ggml_met
+ 
+ void ggml_metal_encoder_set_threadgroup_memory_size(ggml_metal_encoder_t encoder, size_t size, int idx);
+ 
++extern __thread bool ggml_metal_skip_dispatch;
++
+ void ggml_metal_encoder_dispatch_threadgroups(ggml_metal_encoder_t encoder, int tg0, int tg1, int tg2, int tptg0, int tptg1, int tptg2);
+ 
+ void ggml_metal_encoder_memory_barrier(ggml_metal_encoder_t encoder);
+diff --git a/ggml/src/ggml-metal/ggml-metal-device.m b/ggml/src/ggml-metal/ggml-metal-device.m
+index a7cbc60eb..b3f1c1f40 100644
+--- a/ggml/src/ggml-metal/ggml-metal-device.m
++++ b/ggml/src/ggml-metal/ggml-metal-device.m
+@@ -505,7 +505,12 @@ void ggml_metal_encoder_set_threadgroup_memory_size(ggml_metal_encoder_t encoder
+     [encoder->obj setThreadgroupMemoryLength:size atIndex:idx];
+ }
+ 
++__thread bool ggml_metal_skip_dispatch = false;
++
+ void ggml_metal_encoder_dispatch_threadgroups(ggml_metal_encoder_t encoder, int tg0, int tg1, int tg2, int tptg0, int tptg1, int tptg2) {
++    if (ggml_metal_skip_dispatch) {
++        return;
++    }
+     [encoder->obj dispatchThreadgroups:MTLSizeMake(tg0, tg1, tg2) threadsPerThreadgroup:MTLSizeMake(tptg0, tptg1, tptg2)];
+ }
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal-ops.cpp b/ggml/src/ggml-metal/ggml-metal-ops.cpp
+index 18656b346..74a9f4979 100644
+--- a/ggml/src/ggml-metal/ggml-metal-ops.cpp
++++ b/ggml/src/ggml-metal/ggml-metal-ops.cpp
+@@ -9,6 +9,8 @@
+ #include "ggml-metal-device.h"
+ 
+ #include <cassert>
++#include <cstdlib>
++#include <cstring>
+ #include <algorithm>
+ #include <limits>
+ #include <cmath>
+@@ -172,6 +174,27 @@ static bool ggml_metal_op_concurrency_add(ggml_metal_op_t ctx, const ggml_tensor
+     return ggml_mem_ranges_add(ctx->mem_ranges, node);
+ }
+ 
++static bool ggml_metal_skip_op(enum ggml_op op) {
++    static bool tab[GGML_OP_COUNT];
++    static bool init = false;
++    if (!init) {
++        init = true;
++        const char * env = getenv("GGML_METAL_SKIP_OPS");
++        if (env) {
++            char buf[512];
++            snprintf(buf, sizeof(buf), "%s", env);
++            for (char * tok = strtok(buf, ","); tok; tok = strtok(NULL, ",")) {
++                for (int i = 0; i < GGML_OP_COUNT; ++i) {
++                    if (strcmp(tok, "ALL") == 0 || strcmp(tok, ggml_op_name((enum ggml_op) i)) == 0) {
++                        tab[i] = true;
++                    }
++                }
++            }
++        }
++    }
++    return tab[op];
++}
++
+ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
+     struct ggml_tensor * node = ctx->node(idx);
+ 
+@@ -262,6 +285,8 @@ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
+         }
+     }
+ 
++    ggml_metal_skip_dispatch = ggml_metal_skip_op(node->op);
++
+     switch (node->op) {
+         case GGML_OP_CONCAT:
+             {
+@@ -480,6 +505,8 @@ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
+             }
+     }
+ 
++    ggml_metal_skip_dispatch = false;
++
+     if (ctx->debug_graph > 0) {
+         if (n_fuse > 1) {
+             GGML_LOG_DEBUG("%s:               fuse %d ops\n", __func__, n_fuse);

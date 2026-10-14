@@ -25,7 +25,7 @@ Durum: ölçen=[F]/ana oturum; tekrar=bilinmiyor; doğrulama=yok; bağımsız te
 | Qwen2.5-7B q4_0 tg | 53.7 tok/s |
 | OLMoE-1B-7B q4_0 tg | 229 tok/s |
 | 1.5B q4_0 prefill | ~1990 tok/s |
-| Etkin bant (1.5B q4_0 decode) | ~191 GB/s |
+| Etkin bant (1.5B q4_0 decode) | ~191 GB/s (DÜZELTİLDİ: dosya boyutuyla hesaplanmıştı, gömme tablosu okunmuyor; doğrusu ~249 GB/s, TUR1 bölüm 6) |
 | Spekülatif 1.5B hedef + 0.5B taslak | 86 tok/s (taban 180) |
 | Spekülatif 7B hedef + 0.5B taslak | 20-24 tok/s (taban 53.7) |
 | 1.5B hedef perf: doğrulama | 904 token / 1588 ms = 569 tok/s; sürenin %68'i "unaccounted" (taslak) |
@@ -47,7 +47,7 @@ Durum: ölçen=ana oturum zinciri (llama-perplexity); ben yalnız çıktı dosya
 
 Durum: ölçen=[A]; tekrar=-r 5 (ilk tablolar), -r 3 (ince eğri); doğrulama=yok (araç çıktısı); bağımsız tekrar=YOK (tg128 değerleri [F] ile uyumlu: 1.5B 179.5 vs 180, 7B 54.5 vs 53.7).
 
-tg128 (tok/s): 0.5B 316.4 ± 1.8, 1.5B 179.5 ± 1.0, 7B 54.5 ± 0.02 (7B etkin bant 241 GB/s, 1.5B 190, 0.5B 134).
+tg128 (tok/s): 0.5B 316.4 ± 1.8, 1.5B 179.5 ± 1.0, 7B 54.5 ± 0.02 (7B etkin bant 241 GB/s, 1.5B 190, 0.5B 134: DÜZELTİLDİ, bu üçü dosya boyutu / token süresiyle hesaplandı; gömme tablosu okunmuyor ve 1.63 ms sabit masraf düşülmemişti. Doğrusu `main_session/TUR1-DOGRULAMA.md` bölüm 2: eğim 250.8 GB/s).
 
 Parti süresi (ms) ve tek-token'a oran (ince eğri, `n/avg_ts`):
 
@@ -67,7 +67,7 @@ Parti süresi (ms) ve tek-token'a oran (ince eğri, `n/avg_ts`):
 
 Bulgu (kayıt): 1-8'de doğrusal; 9'dan itibaren düz taban (0.5B 3.0x, 1.5B 4.5x, 7B 5.1x).
 
-Sabit masraf uydurması (tg128, 3 nokta, tek doğrulama): token süresi ≈ 1.54 ms + 3.80 ms/GB × model boyutu (bant tavanı ~263 GB/s); 0.5B tahmin 317 tok/s, ölçülen 316.
+Sabit masraf uydurması (tg128, 3 nokta, tek doğrulama): token süresi ≈ 1.54 ms + 3.80 ms/GB × model boyutu (bant tavanı ~263 GB/s); 0.5B tahmin 317 tok/s, ölçülen 316. **GEÇERSİZ:** model boyutuna gömme tablosu dahildi, oysa decode onu okumuyor. Doğrusu 5 noktayla t = 1.63 ms + 3.99 ms/GB (250.8 GB/s), R² 0.9993 (`main_session/TUR1-DOGRULAMA.md` bölüm 2).
 
 ## 4. Spekülatif decode (yamasız, 7B hedef + 0.5B taslak, esse, temp 0)
 
@@ -116,7 +116,7 @@ Matris (-n 600), k=8 / k=31 (taban k=0):
 
 Durum: ölçen=[A]; tekrar=reps 15 medyan (dispatch başına 3-4 tekrar); doğrulama=CPU referansı VAR (göreli ≤ 3e-6; q4/q8 çıktısı okuyan=üreten göreli ≤ 1e-6); bağımsız tekrar=YOK. **Aşağıdaki q4/q8 sonuçları, yavaş `uchar4→float4` dönüşümü yüzünden yanıltıcıdır.** Karşılığı bölüm 8'dedir.
 
-Bant tavanı (akış okuma): 254.3 GB/s (medyan), en iyi 255.4. İlk okuyan çekirdek 175-214 GB/s (kod düzeni yüzünden tavanın altında); daha sonra şablon çekirdek 244-257 GB/s.
+Bant tavanı (akış okuma): 254.3 GB/s (medyan), en iyi 255.4 (DÜŞÜK ÇIKMIŞ: gerçek tavan 258-264 GB/s, `main_session/TUR1-DOGRULAMA.md` bölüm 13). İlk okuyan çekirdek 175-214 GB/s (kod düzeni yüzünden tavanın altında); daha sonra şablon çekirdek 244-257 GB/s.
 
 q4 (8192², sanal GB/s): okuma 243.7 (433 G ağırlık/s), rastgele üretim 228.0 (405 G ağırlık/s), 0.94x. q8: okuma 239.7, üretim 326.8 (1.36x), karışık en iyi 3/4 üretimde 437.8 (1.83x). fp16: okuma 232.8, üretim 959.7 (4.12x); karışık 3/4 üretim 1045 GB/s.
 
@@ -218,7 +218,7 @@ Ara dönemler (kayıt): ilk skaler çekirdek (lane=32 ağırlıklı blok, yavaş
 
 ## 10. llama.cpp yamalı yapı
 
-Durum: ölçen=[A]; tekrar: llama-bench -r 3 (parti eğrileri), -r 5 (tg128), spekülatif k=1-3: 3 tekrar, k=4-5: 1 tekrar; lookup: 1 tekrar/hücre; doğrulama=ggml test-backend-ops (CPU referansı; yalnız küçük boyut) VAR, gerçek model boyutunda sayısal doğrulama YOK (çıktı metni karşılaştırılmadı); bağımsız tekrar=YOK. Yama aynı ikilide `GGML_METAL_SB=0` (kapalı) ile yamasız davranışı veriyor.
+Durum: ölçen=[A]; tekrar: llama-bench -r 3 (parti eğrileri), -r 5 (tg128), spekülatif k=1-3: 3 tekrar, k=4-5: 1 tekrar; lookup: 1 tekrar/hücre; doğrulama=ggml test-backend-ops (CPU referansı; yalnız küçük boyut) VAR, gerçek model boyutunda sayısal doğrulama bu tabloda YOK (sonradan yapıldı: PPL farkı en fazla 0.0005, greedy çıktı bayt bayt aynı, `main_session/TUR1-DOGRULAMA.md` bölüm 1); bağımsız tekrar kısmen VAR (aynı dosya bölüm 4: lookup 6 hücrenin 5'i tuttu, 1'i düzeltildi). Yama aynı ikilide `GGML_METAL_SB=0` (kapalı) ile yamasız davranışı veriyor.
 
 Eşik taraması (yamasız kod yolu; 7B parti ms; tek tekrar seti, gürültülü):
 
@@ -268,7 +268,7 @@ llama-lookup 7B, yamalı/yamasız (tok/s; B=k+1; 1 tekrar; **gürültü payı va
 | 2 (3) | 47.5 / 88.4 | 50.4 / 83.7 | 51.4 / 97.7 | 48.0 / 52.6 |
 | 3 (4) | 44.4 / 82.0 | 48.4 / 76.8 | 45.9 / 86.9 | 44.5 / 49.5 |
 | 4 (5) | 39.0 / 96.0 | 41.2 / 92.9 | 40.5 / 100.3 | 39.1 / 49.7 |
-| 7 (8) | 39.2 / **106.6** | 46.4 / **118.2** | 44.9 / **127.7** | 34.1 / 48.7 |
+| 7 (8) | 39.2 / **106.6** | 46.4 / **118.2** | 44.9 / **127.7** | 34.1 / 48.7 (bağımsız tekrar: 40.2-40.3 / 50.8-51.4; ilk koşu yamasızda artefaktı, ceza 0.64x değil 0.75x) |
 | 8 (9) | 58.3 / 86.9 | 76.6 / 76.5 | 78.0 / 78.2 | 40.1 / 40.7 |
 | 15 (16) | 68.3 / 100.1 | 111.1 / 108.1 | 115.1 / 115.5 | 39.0 / 40.3 |
 | 31 (32) | 73.1 / 103.1 | 160.2 / 156.9 | 170.1 / 171.1 | 39.7 / 40.7 |
@@ -293,9 +293,9 @@ Projeksiyon iyimserdi (k=2 için B=3 maliyeti 1.09x varsayılmıştı, gerçek 1
 
 ## 12. GPU sayaçları (xctrace)
 
-Durum: ölçen=[A]; tekrar=3 deneme; doğrulama=yok; sonuç=**sayaç yakalanamadı**. Detay: `raw_results/07_xctrace_notes.txt`. "Metal GPU Counters" (varsayılan "Performance Limiters"): "Selected counter profile is not supported on target device"; "Metal System Trace" ve "Game Performance" yalnız zaman çizelgesi verdi. ALU limiter / bellek limiter / occupancy değerleri YOK. Çıkarımlar (sayaç değil, değişken-çıkarma): xorshift türetme hesap sınırlı, E ve B=1 q4 okuma bellek sınırlı, rastgele üretim hesap sınırlı. Sonradan Xcode Metal Debugger ile sayaç alındı (B=4/B=8 yamalı çarpma çekirdeği): `main_session/TUR1-DOGRULAMA.md` bölüm 19.
+Durum: ölçen=[A]; tekrar=3 deneme; doğrulama=yok; sonuç=**xctrace ile sayaç yakalanamadı**. Detay: `raw_results/07_xctrace_notes.txt`. "Metal GPU Counters" (varsayılan "Performance Limiters"): "Selected counter profile is not supported on target device"; "Metal System Trace" ve "Game Performance" yalnız zaman çizelgesi verdi. ALU limiter / bellek limiter / occupancy değerleri YOK. Çıkarımlar (sayaç değil, değişken-çıkarma): xorshift türetme hesap sınırlı, E ve B=1 q4 okuma bellek sınırlı, rastgele üretim hesap sınırlı. Sonradan Xcode Metal Debugger ile sayaç alındı (B=4/B=8 yamalı çarpma çekirdeği): `main_session/TUR1-DOGRULAMA.md` bölüm 19.
 
 ## 13. Bende bulunmayan ölçümler
 
-- **Ana oturumun zip/entropi/CPU ölçümleri [M]:** sonuç tabloları bende yok (betik adlarını gördüm, içeriklerini ve çıktılarını görmedim). SONUCLAR'a konamadı. koordinatör oturumun raporlarından eklenmeli.
+- **Ana oturumun zip/entropi/CPU ölçümleri [M]:** bu belgeyi yazan oturumda yoktu; sonradan `main_session/OLCUMLER.md` olarak eklendi (tek koşu, bağımsız tekrar yok).
 - Orijinal ham dosyalar panikle kayboldu; `raw_results/` aktarım kopyasıdır.

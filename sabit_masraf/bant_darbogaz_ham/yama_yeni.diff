@@ -1,0 +1,1427 @@
+diff --git a/ggml/src/ggml-metal/ggml-metal-common.cpp b/ggml/src/ggml-metal/ggml-metal-common.cpp
+--- a/ggml/src/ggml-metal/ggml-metal-common.cpp	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-common.cpp	2026-10-11 23:33:07
+@@ -1,5 +1,7 @@
+ #include "ggml-metal-common.h"
+ 
++#include <climits>
++
+ #include "ggml-impl.h"
+ #include "ggml-backend-impl.h"
+ 
+@@ -189,6 +191,9 @@
+ 
+     std::vector<ggml_tensor *> fused;
+ 
++    // outputs of the group other than dst() that later nodes may read
++    std::vector<ggml_tensor *> extra_dsts;
++
+     ggml_op op() const {
+         return node->op;
+     }
+@@ -228,6 +233,12 @@
+             }
+         }
+ 
++        for (const auto * e : node.extra_dsts) {
++            if (!ggml_mem_ranges_add_dst(mrs, e)) {
++                return false;
++            }
++        }
++
+         return ggml_mem_ranges_add_dst(mrs, node.dst());
+     };
+ 
+@@ -251,6 +262,12 @@
+             }
+         }
+ 
++        for (const auto * e : node.extra_dsts) {
++            if (!ggml_mem_ranges_check_dst(mrs, e)) {
++                return false;
++            }
++        }
++
+         return ggml_mem_ranges_check_dst(mrs, node.dst());
+     };
+ 
+@@ -372,6 +389,258 @@
+     return res;
+ }
+ 
++static bool ggml_metal_fuse_graph_ok(const ggml_cgraph * gf) {
++    static const int max_nodes = []() { const char * s = getenv("GGML_METAL_FUSE_MAX_NODES"); return s ? atoi(s) : INT_MAX; }();
++    static const int min_nodes = []() { const char * s = getenv("GGML_METAL_FUSE_MIN_NODES"); return s ? atoi(s) : 0; }();
++    return gf->n_nodes <= max_nodes && gf->n_nodes >= min_nodes;
++}
++
++bool ggml_metal_can_fuse_mm_add(const ggml_cgraph * gf, const int * idxs) {
++    static const bool enabled = []() { const char * s = getenv("GGML_METAL_FUSE_MM_ADD"); return !(s && atoi(s) == 0); }();
++    if (!enabled || !ggml_metal_fuse_graph_ok(gf)) {
++        return false;
++    }
++
++    const enum ggml_op ops[2] = { GGML_OP_MUL_MAT, GGML_OP_ADD };
++    if (!ggml_can_fuse_ext(gf, idxs, ops, 2)) {
++        return false;
++    }
++
++    const ggml_tensor * mm  = gf->nodes[idxs[0]];
++    const ggml_tensor * add = gf->nodes[idxs[1]];
++
++    if (mm->src[0]->type != GGML_TYPE_Q4_0 || mm->src[1]->type != GGML_TYPE_F32 || mm->type != GGML_TYPE_F32) {
++        return false;
++    }
++    if (mm->ne[1] != 1 || mm->ne[2] != 1 || mm->ne[3] != 1 || mm->src[0]->ne[2] != 1 || mm->src[0]->ne[3] != 1) {
++        return false;
++    }
++    if (!ggml_is_contiguous(mm) || !ggml_is_contiguous(add) || !ggml_is_contiguous(mm->src[1])) {
++        return false;
++    }
++
++    const ggml_tensor * other = add->src[0] == mm ? add->src[1] : add->src[0];
++
++    return other->type == GGML_TYPE_F32 && ggml_is_contiguous(other) && ggml_nelements(other) == mm->ne[0];
++}
++
++bool ggml_metal_can_fuse_mm_glu(const ggml_cgraph * gf, const int * idxs) {
++    static const bool enabled = []() { const char * s = getenv("GGML_METAL_FUSE_MM_GLU"); return !(s && atoi(s) == 0); }();
++    if (!enabled || !ggml_metal_fuse_graph_ok(gf)) {
++        return false;
++    }
++
++    const ggml_tensor * m0  = gf->nodes[idxs[0]];
++    const ggml_tensor * m1  = gf->nodes[idxs[1]];
++    const ggml_tensor * glu = gf->nodes[idxs[2]];
++
++    if (m0->op != GGML_OP_MUL_MAT || m1->op != GGML_OP_MUL_MAT || glu->op != GGML_OP_GLU) {
++        return false;
++    }
++    if (ggml_get_glu_op(glu) != GGML_GLU_OP_SWIGLU || ggml_get_op_params_i32(glu, 1) != 0) {
++        return false;
++    }
++    if (!((glu->src[0] == m0 && glu->src[1] == m1) || (glu->src[0] == m1 && glu->src[1] == m0))) {
++        return false;
++    }
++    if (!ggml_node_has_n_uses(gf, idxs[0], 1) || !ggml_node_has_n_uses(gf, idxs[1], 1)) {
++        return false;
++    }
++    if ((m0->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 || (m1->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 || (glu->flags & GGML_TENSOR_FLAG_COMPUTE) == 0) {
++        return false;
++    }
++    if (m0->src[0]->type != GGML_TYPE_Q4_0 || m1->src[0]->type != GGML_TYPE_Q4_0 ||
++        m0->src[1] != m1->src[1] || m0->src[1]->type != GGML_TYPE_F32 ||
++        m0->type != GGML_TYPE_F32 || m1->type != GGML_TYPE_F32 || glu->type != GGML_TYPE_F32) {
++        return false;
++    }
++    if (!ggml_are_same_shape(m0, m1) || !ggml_are_same_shape(m0->src[0], m1->src[0]) ||
++        m0->src[0]->nb[1] != m1->src[0]->nb[1] || !ggml_are_same_shape(m0, glu)) {
++        return false;
++    }
++    if (m0->ne[1] != 1 || m0->ne[2] != 1 || m0->ne[3] != 1 || m0->src[0]->ne[2] != 1 || m0->src[0]->ne[3] != 1) {
++        return false;
++    }
++
++    return ggml_is_contiguous(m0) && ggml_is_contiguous(m1) && ggml_is_contiguous(glu) && ggml_is_contiguous(m0->src[1]);
++}
++
++bool ggml_metal_can_fuse_mm_qkv(const ggml_cgraph * gf, const int * idxs) {
++    static const bool enabled = []() { const char * s = getenv("GGML_METAL_FUSE_MM_QKV"); return !(s && atoi(s) == 0); }();
++    if (!enabled || !ggml_metal_fuse_graph_ok(gf)) {
++        return false;
++    }
++
++    const ggml_tensor * n[6];
++    for (int k = 0; k < 6; k++) {
++        n[k] = gf->nodes[idxs[k]];
++    }
++
++    for (int k = 0; k < 6; k += 2) {
++        if (!ggml_metal_can_fuse_mm_add(gf, idxs + k)) {
++            return false;
++        }
++    }
++
++    const ggml_tensor * x = n[0]->src[1];
++
++    const ggml_tensor * bias[3];
++
++    for (int k = 0; k < 3; k++) {
++        const ggml_tensor * mm  = n[2*k];
++        const ggml_tensor * add = n[2*k + 1];
++
++        if (mm->src[1] != x || mm->src[0]->ne[0] != n[0]->src[0]->ne[0] || mm->src[0]->nb[1] != n[0]->src[0]->nb[1]) {
++            return false;
++        }
++
++        bias[k] = add->src[0] == mm ? add->src[1] : add->src[0];
++    }
++
++    for (int k = 0; k < 3; k++) {
++        for (int m = 0; m < 6; m++) {
++            if (bias[k] == n[m] || n[2*k]->src[0] == n[m]) {
++                return false;
++            }
++        }
++    }
++
++    return true;
++}
++
++static int ggml_metal_use_count(const ggml_cgraph * gf, const ggml_tensor * t) {
++    const size_t pos = ggml_hash_find(&gf->visited_hash_set, t);
++    if (!ggml_bitset_get(gf->visited_hash_set.used, pos)) {
++        return 0;
++    }
++    return gf->use_counts[pos];
++}
++
++static bool ggml_metal_rope_set_rows_ok(const ggml_cgraph * gf, const ggml_tensor * rope, const ggml_tensor * view, const ggml_tensor * sr) {
++    static const bool enabled = []() { const char * s = getenv("GGML_METAL_FUSE_ROPE_K"); return !(s && atoi(s) == 0); }();
++    if (!enabled || !ggml_metal_fuse_graph_ok(gf)) {
++        return false;
++    }
++
++    if (rope->op != GGML_OP_ROPE || view->op != GGML_OP_VIEW || sr->op != GGML_OP_SET_ROWS) {
++        return false;
++    }
++    if ((rope->flags & GGML_TENSOR_FLAG_COMPUTE) == 0 || (sr->flags & GGML_TENSOR_FLAG_COMPUTE) == 0) {
++        return false;
++    }
++    if (view->view_src != rope || view->view_offs != 0 || sr->src[0] != view) {
++        return false;
++    }
++    if (ggml_metal_use_count(gf, rope) != 1 || ggml_metal_use_count(gf, view) != 1) {
++        return false;
++    }
++    if ((rope->flags & GGML_TENSOR_FLAG_OUTPUT) || (view->flags & GGML_TENSOR_FLAG_OUTPUT)) {
++        return false;
++    }
++
++    const int mode = ((const int32_t *) rope->op_params)[2];
++    if (!(mode & GGML_ROPE_TYPE_NEOX) || (mode & GGML_ROPE_TYPE_MROPE) || mode == GGML_ROPE_TYPE_VISION) {
++        return false;
++    }
++    if (rope->src[0]->type != GGML_TYPE_F32 || rope->type != GGML_TYPE_F32 || rope->src[1]->type != GGML_TYPE_I32) {
++        return false;
++    }
++    if (rope->ne[3] != 1 || !ggml_is_contiguous(rope) || rope->src[1]->ne[0] != rope->ne[2]) {
++        return false;
++    }
++    if (sr->type != GGML_TYPE_F16 || sr->nb[0] != sizeof(ggml_fp16_t) || (sr->src[1]->type != GGML_TYPE_I64 && sr->src[1]->type != GGML_TYPE_I32)) {
++        return false;
++    }
++    if (view->ne[0] != rope->ne[0]*rope->ne[1] || view->ne[1] != rope->ne[2] || view->ne[2] != 1 || view->ne[3] != 1) {
++        return false;
++    }
++    if (sr->ne[0] != view->ne[0] || sr->src[1]->ne[1] != 1 || sr->src[1]->ne[2] != 1 || sr->src[1]->ne[0] != view->ne[1]) {
++        return false;
++    }
++
++    return true;
++}
++
++bool ggml_metal_can_fuse_rope_q_set_rows(const ggml_cgraph * gf, const int * idxs) {
++    static const bool enabled = []() { const char * s = getenv("GGML_METAL_FUSE_ROPE_QK"); return !(s && atoi(s) == 0); }();
++    if (!enabled || !ggml_metal_fuse_graph_ok(gf)) {
++        return false;
++    }
++
++    if (!ggml_metal_can_fuse_rope_set_rows(gf, idxs + 1)) {
++        return false;
++    }
++
++    const ggml_tensor * q = gf->nodes[idxs[0]];
++    const ggml_tensor * k = gf->nodes[idxs[1]];
++
++    if (q->op != GGML_OP_ROPE || (q->flags & GGML_TENSOR_FLAG_COMPUTE) == 0) {
++        return false;
++    }
++    if (memcmp((const int32_t *) q->op_params + 1, (const int32_t *) k->op_params + 1, 10*sizeof(int32_t)) != 0) {
++        return false;
++    }
++    if (q->src[0]->type != GGML_TYPE_F32 || q->type != GGML_TYPE_F32 || q->src[1] != k->src[1] || q->src[2] || k->src[2]) {
++        return false;
++    }
++    if (q->ne[0] != k->ne[0] || q->ne[2] != k->ne[2] || q->ne[3] != 1 || q->src[0]->ne[0] != k->src[0]->ne[0]) {
++        return false;
++    }
++
++    return true;
++}
++
++static bool ggml_metal_set_rows_v_ok(const ggml_cgraph * gf, const ggml_tensor * rope, const ggml_tensor * sr_k, const ggml_tensor * view_v, const ggml_tensor * sr_v) {
++    static const bool enabled = []() { const char * s = getenv("GGML_METAL_FUSE_SET_V"); return !(s && atoi(s) == 0); }();
++    if (!enabled || !ggml_metal_fuse_graph_ok(gf)) {
++        return false;
++    }
++
++    if (view_v->op != GGML_OP_VIEW || sr_v->op != GGML_OP_SET_ROWS || sr_v->src[0] != view_v) {
++        return false;
++    }
++    if ((sr_v->flags & GGML_TENSOR_FLAG_COMPUTE) == 0) {
++        return false;
++    }
++    if (view_v->type != GGML_TYPE_F32 || view_v->nb[0] != sizeof(float) || view_v->ne[2] != 1 || view_v->ne[3] != 1) {
++        return false;
++    }
++    if (view_v->ne[0] != rope->ne[0]*rope->ne[1] || view_v->ne[1] != rope->ne[2]) {
++        return false;
++    }
++    if (sr_v->type != GGML_TYPE_F16 || sr_v->nb[0] != sizeof(ggml_fp16_t) || sr_v->ne[0] != view_v->ne[0]) {
++        return false;
++    }
++    if (sr_v->src[1]->type != sr_k->src[1]->type || sr_v->src[1]->ne[0] != view_v->ne[1] || sr_v->src[1]->ne[1] != 1 || sr_v->src[1]->ne[2] != 1) {
++        return false;
++    }
++
++    return true;
++}
++
++bool ggml_metal_can_fuse_rope_set_rows_v(const ggml_cgraph * gf, const int * idxs) {
++    const ggml_tensor * rope = gf->nodes[idxs[0]];
++    const ggml_tensor * sr_k = gf->nodes[idxs[1]];
++    const ggml_tensor * sr_v = gf->nodes[idxs[2]];
++
++    return sr_v->op == GGML_OP_SET_ROWS && sr_v->src[0] && ggml_metal_set_rows_v_ok(gf, rope, sr_k, sr_v->src[0], sr_v);
++}
++
++bool ggml_metal_can_fuse_rope_set_rows(const ggml_cgraph * gf, const int * idxs) {
++    const ggml_tensor * rope = gf->nodes[idxs[0]];
++    const ggml_tensor * sr   = gf->nodes[idxs[1]];
++
++    return sr->op == GGML_OP_SET_ROWS && sr->src[0] && ggml_metal_rope_set_rows_ok(gf, rope, sr->src[0], sr);
++}
++
++bool ggml_metal_can_fuse_rope_view_set_rows(const ggml_cgraph * gf, int idx) {
++    if (idx + 2 >= gf->n_nodes) {
++        return false;
++    }
++
++    return ggml_metal_rope_set_rows_ok(gf, gf->nodes[idx], gf->nodes[idx + 1], gf->nodes[idx + 2]);
++}
++
+ void ggml_graph_optimize(ggml_cgraph * gf) {
+     constexpr int MAX_FUSE = 16;
+ 
+@@ -382,6 +651,9 @@
+     std::vector<node_info> nodes;
+     nodes.reserve(gf->n_nodes);
+ 
++    int n_fused_glu = 0;
++    int n_fused_add = 0;
++
+     // fuse nodes:
+     // we don't want to make reorders that break fusing, so we first pack all fusable tensors
+     //   and perform the reorder over the fused nodes. after the reorder is done, we unfuse
+@@ -428,6 +700,41 @@
+             }
+         }
+ 
++        if (node.op() == GGML_OP_MUL_MAT && i + 2 < n) {
++            const int idxs[3] = { i, i + 1, i + 2 };
++            if (ggml_metal_can_fuse_mm_glu(gf, idxs)) {
++                node.add_fused(gf->nodes[i + 1]);
++                node.add_fused(gf->nodes[i + 2]);
++                i += 2;
++                ++n_fused_glu;
++            }
++        }
++
++        if (node.op() == GGML_OP_MUL_MAT && node.fused.empty() && i + 1 < n) {
++            const int idxs[2] = { i, i + 1 };
++            if (ggml_metal_can_fuse_mm_add(gf, idxs)) {
++                ++i;
++                node.add_fused(gf->nodes[i]);
++                ++n_fused_add;
++            }
++        }
++
++        if (node.op() == GGML_OP_ROPE && node.fused.empty() && ggml_metal_can_fuse_rope_view_set_rows(gf, i)) {
++            const ggml_tensor * rope = node.node;
++            const ggml_tensor * sr_k = gf->nodes[i + 2];
++
++            node.add_fused(gf->nodes[i + 1]);
++            node.add_fused(gf->nodes[i + 2]);
++            i += 2;
++
++            if (i + 2 < n && ggml_metal_set_rows_v_ok(gf, rope, sr_k, gf->nodes[i + 1], gf->nodes[i + 2])) {
++                node.extra_dsts.push_back(gf->nodes[i]);
++                node.add_fused(gf->nodes[i + 1]);
++                node.add_fused(gf->nodes[i + 2]);
++                i += 2;
++            }
++        }
++
+         nodes.push_back(std::move(node));
+     }
+ 
+@@ -440,6 +747,21 @@
+         order[i] = i;
+     }
+ #endif
++
++    if (getenv("GGML_METAL_FUSE_STATS")) {
++        static int n_print = 0;
++        if (n_print < 60) {
++            int cols = 0;
++            for (int i = 0; i < n; i++) {
++                if (gf->nodes[i]->op == GGML_OP_MUL_MAT) {
++                    cols = (int) gf->nodes[i]->src[1]->ne[1];
++                    break;
++                }
++            }
++            fprintf(stderr, "GGML_METAL_FUSE_STATS: dugum=%d sutun=%d birlesen_glu=%d birlesen_ekle=%d\n", n, cols, n_fused_glu, n_fused_add);
++            ++n_print;
++        }
++    }
+ 
+     // unfuse
+     {
+diff --git a/ggml/src/ggml-metal/ggml-metal-common.h b/ggml/src/ggml-metal/ggml-metal-common.h
+--- a/ggml/src/ggml-metal/ggml-metal-common.h	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-common.h	2026-10-11 23:33:07
+@@ -47,6 +47,27 @@
+ //       if it proves to work well, we can start using it for other backends in the future
+ void ggml_graph_optimize(struct ggml_cgraph * gf);
+ 
++// true if idxs[0] (MUL_MAT, q4_0 x f32 vector) and idxs[1] (ADD of a contiguous vector) can run as one kernel
++bool ggml_metal_can_fuse_mm_add(const struct ggml_cgraph * gf, const int * idxs);
++
++// true if idxs[0], idxs[1] (two MUL_MAT sharing the same q4_0 x f32 vector) and idxs[2] (SWIGLU of both) can run as one kernel
++bool ggml_metal_can_fuse_mm_glu(const struct ggml_cgraph * gf, const int * idxs);
++
++// true if idxs[0..5] are (MUL_MAT, ADD) x 3 reading the same q4_0 x f32 vector, and can run as one kernel
++bool ggml_metal_can_fuse_mm_qkv(const struct ggml_cgraph * gf, const int * idxs);
++
++// true if idxs[0] (ROPE neox, f32) and idxs[1] (SET_ROWS of a view of its result into an f16 cache) can run as one kernel
++bool ggml_metal_can_fuse_rope_set_rows(const struct ggml_cgraph * gf, const int * idxs);
++
++// same check on the raw graph, where the view node sits between the rope and the set_rows
++bool ggml_metal_can_fuse_rope_view_set_rows(const struct ggml_cgraph * gf, int idx);
++
++// true if idxs[0] (ROPE), idxs[1] (its SET_ROWS) and idxs[2] (a SET_ROWS of an f32 matrix into an f16 cache) can run as one kernel
++bool ggml_metal_can_fuse_rope_set_rows_v(const struct ggml_cgraph * gf, const int * idxs);
++
++// true if idxs[0] (ROPE of the queries), idxs[1] (ROPE of the keys) and idxs[2] (its SET_ROWS) can run as one kernel
++bool ggml_metal_can_fuse_rope_q_set_rows(const struct ggml_cgraph * gf, const int * idxs);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/ggml/src/ggml-metal/ggml-metal-context.m b/ggml/src/ggml-metal/ggml-metal-context.m
+--- a/ggml/src/ggml-metal/ggml-metal-context.m	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-context.m	2026-10-11 23:33:07
+@@ -435,14 +435,15 @@
+     }
+ }
+ 
+-enum ggml_status ggml_metal_graph_compute(ggml_metal_t ctx, struct ggml_cgraph * gf) {
++static enum ggml_status ggml_metal_graph_compute_inner(ggml_metal_t ctx, struct ggml_cgraph * gf) {
+     if (ctx->has_error) {
+         GGML_LOG_ERROR("%s: backend is in error state from a previous command buffer failure - recreate the backend to recover\n", __func__);
+         return GGML_STATUS_FAILED;
+     }
+ 
+     // number of nodes encoded by the main thread (empirically determined)
+-    const int n_main = MAX(64, 0.1*gf->n_nodes);
++    const char * n_main_s = getenv("GGML_METAL_N_MAIN");
++    const int n_main = n_main_s ? atoi(n_main_s) : MAX(64, 0.1*gf->n_nodes);
+ 
+     // number of threads in addition to the main thread
+     const int n_cb = ctx->n_cb;
+@@ -614,6 +615,52 @@
+     return GGML_STATUS_SUCCESS;
+ }
+ 
++enum ggml_status ggml_metal_graph_compute(ggml_metal_t ctx, struct ggml_cgraph * gf) {
++    static int timing = -1;
++    static int stats  = -1;
++    if (timing < 0) {
++        timing = getenv("GGML_METAL_TIMING") != NULL;
++        stats  = getenv("GGML_METAL_FUSE_STATS") != NULL;
++    }
++    if (stats) {
++        static int n_print = 0;
++        const int64_t c0 = __atomic_load_n(&ggml_metal_dispatch_count, __ATOMIC_RELAXED);
++        const int64_t b0 = __atomic_load_n(&ggml_metal_barrier_count,  __ATOMIC_RELAXED);
++        const enum ggml_status status = ggml_metal_graph_compute_inner(ctx, gf);
++        if (n_print++ < 400) {
++            int cols = 0;
++            for (int i = 0; i < gf->n_nodes; i++) {
++                if (gf->nodes[i]->op == GGML_OP_MUL_MAT) {
++                    cols = (int) gf->nodes[i]->src[1]->ne[1];
++                    break;
++                }
++            }
++            fprintf(stderr, "GGML_METAL_FUSE_STATS: graf dugum=%d sutun=%d gpu_cagrisi=%lld bariyer=%lld\n", gf->n_nodes, cols,
++                    (long long) (__atomic_load_n(&ggml_metal_dispatch_count, __ATOMIC_RELAXED) - c0),
++                    (long long) (__atomic_load_n(&ggml_metal_barrier_count,  __ATOMIC_RELAXED) - b0));
++        }
++        return status;
++    }
++    if (!timing) {
++        return ggml_metal_graph_compute_inner(ctx, gf);
++    }
++
++    static int64_t t_acc = 0;
++    static int64_t n_acc = 0;
++
++    const int64_t t_start = ggml_time_us();
++    const enum ggml_status status = ggml_metal_graph_compute_inner(ctx, gf);
++    t_acc += ggml_time_us() - t_start;
++
++    if (++n_acc == 256) {
++        fprintf(stderr, "GGML_METAL_TIMING: graph_compute ortalama %.1f us (%d dugum)\n", (double) t_acc / n_acc, gf->n_nodes);
++        t_acc = 0;
++        n_acc = 0;
++    }
++
++    return status;
++}
++
+ void ggml_metal_graph_optimize(ggml_metal_t ctx, struct ggml_cgraph * gf) {
+     //const int64_t t_start = ggml_time_us();
+ 
+@@ -661,6 +708,13 @@
+ }
+ 
+ void ggml_metal_set_n_cb(ggml_metal_t ctx, int n_cb) {
++    {
++        const char * n_cb_s = getenv("GGML_METAL_N_CB");
++        if (n_cb_s) {
++            n_cb = atoi(n_cb_s);
++        }
++    }
++
+     if (ctx->n_cb != n_cb) {
+         ctx->n_cb = MIN(n_cb, GGML_METAL_MAX_COMMAND_BUFFERS);
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal-device.cpp b/ggml/src/ggml-metal/ggml-metal-device.cpp
+--- a/ggml/src/ggml-metal/ggml-metal-device.cpp	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-device.cpp	2026-10-11 23:33:07
+@@ -776,7 +776,7 @@
+     return res;
+ }
+ 
+-ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv(ggml_metal_library_t lib, const ggml_tensor * op) {
++static ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_impl(ggml_metal_library_t lib, const ggml_tensor * op, int mode) {
+     GGML_TENSOR_LOCALS( int32_t, ne0, op->src[0], ne);
+     GGML_TENSOR_LOCALS( int32_t, ne1, op->src[1], ne);
+ 
+@@ -794,6 +794,8 @@
+ 
+     const char * suffix = "";
+ 
++    GGML_ASSERT(mode == 0 || op->src[0]->type == GGML_TYPE_Q4_0);
++
+     // use custom matrix x vector kernel
+     switch (tsrc0) {
+         case GGML_TYPE_F32:
+@@ -822,6 +824,10 @@
+             {
+                 nsg = N_SG_Q4_0;
+                 nr0 = N_R0_Q4_0;
++                suffix = mode == 1 ? "_add" : mode == 2 ? "_glu" : mode == 3 ? "_qkv" : "";
++                if (mode == 2) {
++                    nr0 = 2;
++                }
+             } break;
+         case GGML_TYPE_Q4_1:
+             {
+@@ -962,6 +968,22 @@
+     return res;
+ }
+ 
++ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv(ggml_metal_library_t lib, const ggml_tensor * op) {
++    return ggml_metal_library_get_pipeline_mul_mv_impl(lib, op, 0);
++}
++
++ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_add(ggml_metal_library_t lib, const ggml_tensor * op) {
++    return ggml_metal_library_get_pipeline_mul_mv_impl(lib, op, 1);
++}
++
++ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_glu(ggml_metal_library_t lib, const ggml_tensor * op) {
++    return ggml_metal_library_get_pipeline_mul_mv_impl(lib, op, 2);
++}
++
++ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_qkv(ggml_metal_library_t lib, const ggml_tensor * op) {
++    return ggml_metal_library_get_pipeline_mul_mv_impl(lib, op, 3);
++}
++
+ ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mm_id_map0(ggml_metal_library_t lib, int ne02, int ne20) {
+     char base[256];
+     char name[256];
+@@ -1715,6 +1737,28 @@
+     }
+ 
+     res.smem = 32*sizeof(float);
++
++    return res;
++}
++
++ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_rope_set_rows(ggml_metal_library_t lib, const ggml_tensor * set_rows) {
++    char base[256];
++    char name[256];
++
++    snprintf(base, 256, "kernel_rope_neox_set_rows_%s", set_rows->src[1]->type == GGML_TYPE_I64 ? "i64" : "i32");
++    snprintf(name, 256, "%s_imrope=0_is_back=0", base);
++
++    ggml_metal_pipeline_with_params res = ggml_metal_library_get_pipeline(lib, name);
++    if (!res.pipeline) {
++        ggml_metal_cv_t cv = ggml_metal_cv_init();
++
++        ggml_metal_cv_set_bool(cv, false, FC_ROPE + 0);
++        ggml_metal_cv_set_bool(cv, false, FC_ROPE + 1);
++
++        res = ggml_metal_library_compile_pipeline(lib, base, name, cv);
++
++        ggml_metal_cv_free(cv);
++    }
+ 
+     return res;
+ }
+diff --git a/ggml/src/ggml-metal/ggml-metal-device.h b/ggml/src/ggml-metal/ggml-metal-device.h
+--- a/ggml/src/ggml-metal/ggml-metal-device.h	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-device.h	2026-10-11 23:33:07
+@@ -85,6 +85,10 @@
+ 
+ void ggml_metal_encoder_set_threadgroup_memory_size(ggml_metal_encoder_t encoder, size_t size, int idx);
+ 
++extern __thread bool ggml_metal_skip_dispatch;
++extern int64_t ggml_metal_dispatch_count;
++extern int64_t ggml_metal_barrier_count;
++
+ void ggml_metal_encoder_dispatch_threadgroups(ggml_metal_encoder_t encoder, int tg0, int tg1, int tg2, int tptg0, int tptg1, int tptg2);
+ 
+ void ggml_metal_encoder_memory_barrier(ggml_metal_encoder_t encoder);
+@@ -134,6 +138,9 @@
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_sb         (ggml_metal_library_t lib, int ne11, bool mma, int tm, int nr);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mm            (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv            (ggml_metal_library_t lib, const struct ggml_tensor * op);
++struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_add        (ggml_metal_library_t lib, const struct ggml_tensor * op);
++struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_glu        (ggml_metal_library_t lib, const struct ggml_tensor * op);
++struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_qkv        (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mm_id_map0    (ggml_metal_library_t lib, int ne02, int ne20);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mm_id         (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_mul_mv_id         (ggml_metal_library_t lib, const struct ggml_tensor * op);
+@@ -148,6 +155,7 @@
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_group_norm        (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_norm              (ggml_metal_library_t lib, const struct ggml_tensor * op, int32_t n_fuse);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_rope              (ggml_metal_library_t lib, const struct ggml_tensor * op);
++struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_rope_set_rows    (ggml_metal_library_t lib, const struct ggml_tensor * set_rows);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_im2col            (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_transpose_1d (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_transpose_2d (ggml_metal_library_t lib, const struct ggml_tensor * op);
+diff --git a/ggml/src/ggml-metal/ggml-metal-device.m b/ggml/src/ggml-metal/ggml-metal-device.m
+--- a/ggml/src/ggml-metal/ggml-metal-device.m	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-device.m	2026-10-11 23:33:07
+@@ -505,11 +505,20 @@
+     [encoder->obj setThreadgroupMemoryLength:size atIndex:idx];
+ }
+ 
++__thread bool ggml_metal_skip_dispatch = false;
++int64_t ggml_metal_dispatch_count = 0;
++int64_t ggml_metal_barrier_count = 0;
++
+ void ggml_metal_encoder_dispatch_threadgroups(ggml_metal_encoder_t encoder, int tg0, int tg1, int tg2, int tptg0, int tptg1, int tptg2) {
++    if (ggml_metal_skip_dispatch) {
++        return;
++    }
++    __atomic_fetch_add(&ggml_metal_dispatch_count, 1, __ATOMIC_RELAXED);
+     [encoder->obj dispatchThreadgroups:MTLSizeMake(tg0, tg1, tg2) threadsPerThreadgroup:MTLSizeMake(tptg0, tptg1, tptg2)];
+ }
+ 
+ void ggml_metal_encoder_memory_barrier(ggml_metal_encoder_t encoder) {
++    __atomic_fetch_add(&ggml_metal_barrier_count, 1, __ATOMIC_RELAXED);
+     [encoder->obj memoryBarrierWithScope:MTLBarrierScopeBuffers];
+ }
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal-impl.h b/ggml/src/ggml-metal/ggml-metal-impl.h
+--- a/ggml/src/ggml-metal/ggml-metal-impl.h	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-impl.h	2026-10-11 23:33:07
+@@ -331,6 +331,18 @@
+ } ggml_metal_kargs_rope;
+ 
+ typedef struct {
++    ggml_metal_kargs_rope rope;
++    uint64_t nb10;
++    uint64_t nb1_dst;
++    int32_t  n_v;
++    uint64_t nb01_v;
++    uint64_t nb10_v;
++    uint64_t nb1_dst_v;
++    int32_t  n_q;
++    ggml_metal_kargs_rope rope_q;
++} ggml_metal_kargs_rope_set_rows;
++
++typedef struct {
+     int32_t  ne11;
+     int32_t  ne_12_2; // assume K and V are same shape
+     int32_t  ne_12_3;
+@@ -471,6 +483,12 @@
+     int16_t  r2;
+     int16_t  r3;
+ } ggml_metal_kargs_mul_mv;
++
++typedef struct {
++    ggml_metal_kargs_mul_mv mv;
++    int32_t ne01_b;
++    int32_t ne01_c;
++} ggml_metal_kargs_mul_mv_qkv;
+ 
+ typedef struct {
+     int32_t  ne00;
+diff --git a/ggml/src/ggml-metal/ggml-metal-ops.cpp b/ggml/src/ggml-metal/ggml-metal-ops.cpp
+--- a/ggml/src/ggml-metal/ggml-metal-ops.cpp	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal-ops.cpp	2026-10-11 23:33:07
+@@ -9,6 +9,8 @@
+ #include "ggml-metal-device.h"
+ 
+ #include <cassert>
++#include <cstdlib>
++#include <cstring>
+ #include <algorithm>
+ #include <limits>
+ #include <cmath>
+@@ -88,6 +90,54 @@
+         return ggml_can_fuse_ext(gf, idxs.data() + i0, ops, n_ops);
+     }
+ 
++    bool can_fuse_mm_glu(int i0) const {
++        if (i0 + 3 > n_nodes()) {
++            return false;
++        }
++
++        return ggml_metal_can_fuse_mm_glu(gf, idxs.data() + i0);
++    }
++
++    bool can_fuse_rope_set_rows(int i0) const {
++        if (i0 + 2 > n_nodes()) {
++            return false;
++        }
++
++        return ggml_metal_can_fuse_rope_set_rows(gf, idxs.data() + i0);
++    }
++
++    bool can_fuse_rope_q(int i0) const {
++        if (i0 + 3 > n_nodes()) {
++            return false;
++        }
++
++        return ggml_metal_can_fuse_rope_q_set_rows(gf, idxs.data() + i0);
++    }
++
++    bool can_fuse_rope_set_rows_v(int i0) const {
++        if (i0 + 3 > n_nodes()) {
++            return false;
++        }
++
++        return ggml_metal_can_fuse_rope_set_rows_v(gf, idxs.data() + i0);
++    }
++
++    bool can_fuse_mm_qkv(int i0) const {
++        if (i0 + 6 > n_nodes()) {
++            return false;
++        }
++
++        return ggml_metal_can_fuse_mm_qkv(gf, idxs.data() + i0);
++    }
++
++    bool can_fuse_mm_add(int i0) const {
++        if (i0 + 2 > n_nodes()) {
++            return false;
++        }
++
++        return ggml_metal_can_fuse_mm_add(gf, idxs.data() + i0);
++    }
++
+     ggml_metal_device_t  dev;
+     ggml_metal_library_t lib;
+     ggml_metal_encoder_t enc;
+@@ -172,6 +222,27 @@
+     return ggml_mem_ranges_add(ctx->mem_ranges, node);
+ }
+ 
++static bool ggml_metal_skip_op(enum ggml_op op) {
++    static bool tab[GGML_OP_COUNT];
++    static bool init = false;
++    if (!init) {
++        init = true;
++        const char * env = getenv("GGML_METAL_SKIP_OPS");
++        if (env) {
++            char buf[512];
++            snprintf(buf, sizeof(buf), "%s", env);
++            for (char * tok = strtok(buf, ","); tok; tok = strtok(NULL, ",")) {
++                for (int i = 0; i < GGML_OP_COUNT; ++i) {
++                    if (strcmp(tok, "ALL") == 0 || strcmp(tok, ggml_op_name((enum ggml_op) i)) == 0) {
++                        tab[i] = true;
++                    }
++                }
++            }
++        }
++    }
++    return tab[op];
++}
++
+ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
+     struct ggml_tensor * node = ctx->node(idx);
+ 
+@@ -262,6 +333,8 @@
+         }
+     }
+ 
++    ggml_metal_skip_dispatch = ggml_metal_skip_op(node->op);
++
+     switch (node->op) {
+         case GGML_OP_CONCAT:
+             {
+@@ -480,6 +553,8 @@
+             }
+     }
+ 
++    ggml_metal_skip_dispatch = false;
++
+     if (ctx->debug_graph > 0) {
+         if (n_fuse > 1) {
+             GGML_LOG_DEBUG("%s:               fuse %d ops\n", __func__, n_fuse);
+@@ -2055,6 +2130,8 @@
+     const int16_t r2 = ne12/ne02;
+     const int16_t r3 = ne13/ne03;
+ 
++    int n_fuse = 1;
++
+     // find the break-even point where the matrix-matrix kernel becomes more efficient compared
+     // to the matrix-vector kernel
+     static const int ne11_mm_min = []() {
+@@ -2279,8 +2356,26 @@
+ 
+         ggml_metal_encoder_dispatch_threadgroups(enc, ((ne11 + nr1 - 1) / nr1), ((ne01 + nr0 - 1) / nr0), ne12 * ne13, 32, nsg, 1);
+     } else {
+-        auto pipeline = ggml_metal_library_get_pipeline_mul_mv(lib, op);
++        ggml_tensor * add = nullptr;
++        ggml_tensor * glu = nullptr;
++        bool qkv = false;
+ 
++        if (ctx->use_fusion && ctx->can_fuse_mm_qkv(idx)) {
++            qkv = true;
++            n_fuse = 6;
++        } else if (ctx->use_fusion && ctx->can_fuse_mm_glu(idx)) {
++            glu = ctx->node(idx + 2);
++            n_fuse = 3;
++        } else if (ctx->use_fusion && ctx->can_fuse_mm_add(idx)) {
++            add = ctx->node(idx + 1);
++            n_fuse = 2;
++        }
++
++        auto pipeline = qkv ? ggml_metal_library_get_pipeline_mul_mv_qkv(lib, op) :
++                        glu ? ggml_metal_library_get_pipeline_mul_mv_glu(lib, op) :
++                        add ? ggml_metal_library_get_pipeline_mul_mv_add(lib, op) :
++                              ggml_metal_library_get_pipeline_mul_mv(lib, op);
++
+         const int nr0 = pipeline.nr0;
+         const int nr1 = pipeline.nr1;
+         const int nsg = pipeline.nsg;
+@@ -2309,12 +2404,78 @@
+             /*.r3   =*/ r3,
+         };
+ 
++        for (int i = 1; i < n_fuse; ++i) {
++            if (!ggml_metal_op_concurrency_check(ctx, ctx->node(idx + i))) {
++                ggml_metal_op_concurrency_reset(ctx);
++
++                break;
++            }
++        }
++
+         ggml_metal_encoder_set_pipeline(enc, pipeline);
++        if (qkv) {
++            const ggml_tensor * mm_b  = ctx->node(idx + 2);
++            const ggml_tensor * mm_c  = ctx->node(idx + 4);
++            const ggml_tensor * add_a = ctx->node(idx + 1);
++            const ggml_tensor * add_b = ctx->node(idx + 3);
++            const ggml_tensor * add_c = ctx->node(idx + 5);
++
++            const auto other = [](const ggml_tensor * a, const ggml_tensor * mm) {
++                return a->src[0] == mm ? a->src[1] : a->src[0];
++            };
++
++            ggml_metal_kargs_mul_mv_qkv qargs = {
++                /*.mv     =*/ args,
++                /*.ne01_b =*/ (int32_t) mm_b->src[0]->ne[1],
++                /*.ne01_c =*/ (int32_t) mm_c->src[0]->ne[1],
++            };
++
++            ggml_metal_encoder_set_bytes (enc, &qargs, sizeof(qargs), 0);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[0]),            1);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[1]),            2);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(add_a),                 3);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(other(add_a, op)),      4);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(mm_b->src[0]),          5);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(add_b),                 6);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(other(add_b, mm_b)),    7);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(mm_c->src[0]),          8);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(add_c),                 9);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(other(add_c, mm_c)),   10);
++
++            ggml_metal_encoder_set_threadgroup_memory_size(enc, smem, 0);
++
++            const int rows_per_tg = nr0*nsg;
++            const int n_tg = (ne01 + rows_per_tg - 1)/rows_per_tg +
++                             ((int) mm_b->src[0]->ne[1] + rows_per_tg - 1)/rows_per_tg +
++                             ((int) mm_c->src[0]->ne[1] + rows_per_tg - 1)/rows_per_tg;
++
++            ggml_metal_encoder_dispatch_threadgroups(enc, n_tg, 1, 1, 32, nsg, 1);
++
++            return n_fuse;
++        }
+         ggml_metal_encoder_set_bytes   (enc, &args, sizeof(args), 0);
+-        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[0]), 1);
+-        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[1]), 2);
+-        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op),         3);
++        if (glu) {
++            const ggml_tensor * gate = glu->src[0];
++            const ggml_tensor * up   = glu->src[1];
+ 
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(gate->src[0]), 1);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(gate->src[1]), 2);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(glu),          3);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(up->src[0]),   4);
++        } else {
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[0]), 1);
++            ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op->src[1]), 2);
++
++            if (add) {
++                const ggml_tensor * other = add->src[0] == op ? add->src[1] : add->src[0];
++
++                ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(add),   3);
++                ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(other), 4);
++            } else {
++                ggml_metal_encoder_set_buffer(enc, ggml_metal_get_buffer_id(op),    3);
++            }
++        }
++
+         ggml_metal_encoder_set_threadgroup_memory_size(enc, smem, 0);
+ 
+         if (op->src[0]->type == GGML_TYPE_F32 ||
+@@ -2327,7 +2488,7 @@
+         }
+     }
+ 
+-    return 1;
++    return n_fuse;
+ }
+ 
+ size_t ggml_metal_op_mul_mat_id_extra_tpe(const ggml_tensor * op) {
+@@ -3551,6 +3712,62 @@
+     return n_fuse;
+ }
+ 
++static ggml_metal_kargs_rope ggml_metal_rope_args(const ggml_tensor * op) {
++    GGML_TENSOR_LOCALS( int32_t, ne0, op->src[0], ne);
++    GGML_TENSOR_LOCALS(uint64_t, nb0, op->src[0], nb);
++    GGML_TENSOR_LOCALS( int32_t, ne,  op,         ne);
++    GGML_TENSOR_LOCALS(uint64_t, nb,  op,         nb);
++
++    float freq_base;
++    float freq_scale;
++    float ext_factor;
++    float attn_factor;
++    float beta_fast;
++    float beta_slow;
++
++    memcpy(&freq_base,   (const int32_t *) op->op_params +  5, sizeof(float));
++    memcpy(&freq_scale,  (const int32_t *) op->op_params +  6, sizeof(float));
++    memcpy(&ext_factor,  (const int32_t *) op->op_params +  7, sizeof(float));
++    memcpy(&attn_factor, (const int32_t *) op->op_params +  8, sizeof(float));
++    memcpy(&beta_fast,   (const int32_t *) op->op_params +  9, sizeof(float));
++    memcpy(&beta_slow,   (const int32_t *) op->op_params + 10, sizeof(float));
++
++    ggml_metal_kargs_rope args = {
++        /*.ne00        =*/ ne00,
++        /*.ne01        =*/ ne01,
++        /*.ne02        =*/ ne02,
++        /*.ne03        =*/ ne03,
++        /*.nb00        =*/ nb00,
++        /*.nb01        =*/ nb01,
++        /*.nb02        =*/ nb02,
++        /*.nb03        =*/ nb03,
++        /*.ne0         =*/ ne0,
++        /*.ne1         =*/ ne1,
++        /*.ne2         =*/ ne2,
++        /*.ne3         =*/ ne3,
++        /*.nb0         =*/ nb0,
++        /*.nb1         =*/ nb1,
++        /*.nb2         =*/ nb2,
++        /*.nb3         =*/ nb3,
++        /*.n_past      =*/ ((const int32_t *) op->op_params)[0],
++        /*.n_dims      =*/ ((const int32_t *) op->op_params)[1],
++        /*.n_ctx_orig  =*/ ((const int32_t *) op->op_params)[4],
++        /*.freq_base   =*/ freq_base,
++        /*.freq_scale  =*/ freq_scale,
++        /*.ext_factor  =*/ ext_factor,
++        /*.attn_factor =*/ attn_factor,
++        /*.beta_fast   =*/ beta_fast,
++        /*.beta_slow   =*/ beta_slow,
++        /* sect_0      =*/ ((const int32_t *) op->op_params)[11],
++        /* sect_1      =*/ ((const int32_t *) op->op_params)[12],
++        /* sect_2      =*/ ((const int32_t *) op->op_params)[13],
++        /* sect_3      =*/ ((const int32_t *) op->op_params)[14],
++        /* src2        =*/ op->src[2] != nullptr,
++    };
++
++    return args;
++}
++
+ int ggml_metal_op_rope(ggml_metal_op_t ctx, int idx) {
+     ggml_tensor * op = ctx->node(idx);
+ 
+@@ -3628,6 +3845,101 @@
+         /* sect_3      =*/ sect_3,
+         /* src2        =*/ op->src[2] != nullptr,
+     };
++
++    if (ctx->use_fusion && ctx->can_fuse_rope_q(idx)) {
++        ggml_tensor * rope_k     = ctx->node(idx + 1);
++        ggml_tensor * set_rows   = ctx->node(idx + 2);
++        ggml_tensor * set_rows_v = ctx->can_fuse_rope_set_rows_v(idx + 1) ? ctx->node(idx + 3) : nullptr;
++
++        const int n_fuse = set_rows_v ? 4 : 3;
++
++        for (int i = 1; i < n_fuse; ++i) {
++            if (!ggml_metal_op_concurrency_check(ctx, ctx->node(idx + i))) {
++                ggml_metal_op_concurrency_reset(ctx);
++
++                break;
++            }
++        }
++
++        auto pipeline = ggml_metal_library_get_pipeline_rope_set_rows(lib, set_rows);
++
++        ggml_metal_kargs_rope_set_rows sargs = {
++            /*.rope      =*/ ggml_metal_rope_args(rope_k),
++            /*.nb10      =*/ set_rows->src[1]->nb[0],
++            /*.nb1_dst   =*/ set_rows->nb[1],
++            /*.n_v       =*/ set_rows_v ? 1 : 0,
++            /*.nb01_v    =*/ set_rows_v ? set_rows_v->src[0]->nb[1] : 0,
++            /*.nb10_v    =*/ set_rows_v ? set_rows_v->src[1]->nb[0] : 0,
++            /*.nb1_dst_v =*/ set_rows_v ? set_rows_v->nb[1] : 0,
++            /*.n_q       =*/ ne01,
++            /*.rope_q    =*/ args,
++        };
++
++        ggml_metal_encoder_set_pipeline(enc, pipeline);
++        ggml_metal_encoder_set_bytes   (enc, &sargs, sizeof(sargs), 0);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(rope_k->src[0]), 1);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(rope_k->src[1]), 2);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(rope_k->src[0]), 3);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows),   4);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows->src[1]), 5);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows_v ? set_rows_v->src[0] : set_rows->src[0]), 6);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows_v ? set_rows_v : set_rows), 7);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows_v ? set_rows_v->src[1] : set_rows->src[1]), 8);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[0]), 9);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op),        10);
++
++        const int n_kv = rope_k->src[0]->ne[1];
++
++        ggml_metal_encoder_dispatch_threadgroups(enc, ne01 + (set_rows_v ? 2*n_kv : n_kv), ne02, ne03, nth, 1, 1);
++
++        return n_fuse;
++    }
++
++    if (ctx->use_fusion && ctx->can_fuse_rope_set_rows(idx)) {
++        ggml_tensor * set_rows   = ctx->node(idx + 1);
++        ggml_tensor * set_rows_v = ctx->can_fuse_rope_set_rows_v(idx) ? ctx->node(idx + 2) : nullptr;
++
++        const int n_fuse = set_rows_v ? 3 : 2;
++
++        for (int i = 1; i < n_fuse; ++i) {
++            if (!ggml_metal_op_concurrency_check(ctx, ctx->node(idx + i))) {
++                ggml_metal_op_concurrency_reset(ctx);
++
++                break;
++            }
++        }
++
++        auto pipeline = ggml_metal_library_get_pipeline_rope_set_rows(lib, set_rows);
++
++        ggml_metal_kargs_rope_set_rows sargs = {
++            /*.rope      =*/ args,
++            /*.nb10      =*/ set_rows->src[1]->nb[0],
++            /*.nb1_dst   =*/ set_rows->nb[1],
++            /*.n_v       =*/ set_rows_v ? 1 : 0,
++            /*.nb01_v    =*/ set_rows_v ? set_rows_v->src[0]->nb[1] : 0,
++            /*.nb10_v    =*/ set_rows_v ? set_rows_v->src[1]->nb[0] : 0,
++            /*.nb1_dst_v =*/ set_rows_v ? set_rows_v->nb[1] : 0,
++            /*.n_q       =*/ 0,
++            /*.rope_q    =*/ args,
++        };
++
++        ggml_metal_encoder_set_pipeline(enc, pipeline);
++        ggml_metal_encoder_set_bytes   (enc, &sargs, sizeof(sargs), 0);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[0]), 1);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[1]), 2);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[2] ? op->src[2] : op->src[0]), 3);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows),   4);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows->src[1]), 5);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows_v ? set_rows_v->src[0] : set_rows->src[0]), 6);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows_v ? set_rows_v : set_rows), 7);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(set_rows_v ? set_rows_v->src[1] : set_rows->src[1]), 8);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[0]), 9);
++        ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op),        10);
++
++        ggml_metal_encoder_dispatch_threadgroups(enc, set_rows_v ? 2*ne01 : ne01, ne02, ne03, nth, 1, 1);
++
++        return n_fuse;
++    }
+ 
+     auto pipeline = ggml_metal_library_get_pipeline_rope(lib, op);
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal.cpp b/ggml/src/ggml-metal/ggml-metal.cpp
+--- a/ggml/src/ggml-metal/ggml-metal.cpp	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal.cpp	2026-10-11 23:33:07
+@@ -256,8 +256,13 @@
+     return ggml_backend_metal_buffer_type_alloc_buffer(buft, size, true);
+ }
+ 
++static size_t ggml_metal_buffer_align(void) {
++    static const size_t align = []() { const char * s = getenv("GGML_METAL_BUFFER_ALIGN"); return s ? (size_t) atoi(s) : (size_t) 4096; }();
++    return align;
++}
++
+ static size_t ggml_backend_metal_buffer_type_shared_get_alignment(ggml_backend_buffer_type_t buft) {
+-    return 32;
++    return ggml_metal_buffer_align();
+ 
+     GGML_UNUSED(buft);
+ }
+@@ -333,7 +338,7 @@
+ }
+ 
+ static size_t ggml_backend_metal_buffer_type_private_get_alignment(ggml_backend_buffer_type_t buft) {
+-    return 32;
++    return ggml_metal_buffer_align();
+ 
+     GGML_UNUSED(buft);
+ }
+diff --git a/ggml/src/ggml-metal/ggml-metal.metal b/ggml/src/ggml-metal/ggml-metal.metal
+--- a/ggml/src/ggml-metal/ggml-metal.metal	2026-10-11 22:40:26
++++ b/ggml/src/ggml-metal/ggml-metal.metal	2026-10-11 23:33:07
+@@ -3423,12 +3423,14 @@
+ constant short FC_mul_mv_r2    [[function_constant(FC_MUL_MV + 3)]];
+ constant short FC_mul_mv_r3    [[function_constant(FC_MUL_MV + 4)]];
+ 
+-template<typename block_q_type, short NR0, typename args_t>
+-void mul_vec_q_n_f32_impl(
++template<typename block_q_type, short NR0, short MODE, typename args_t>
++void mul_vec_q_n_f32_core(
+         args_t args,
+         device const char * src0,
+         device const char * src1,
+         device       char * dst,
++        device const float * addend,
++        device const char  * src0b,
+         threadgroup  char * shmem,
+         uint3  tgpig,
+         ushort tiisg,
+@@ -3462,8 +3464,26 @@
+         ax[row] = (device const block_q_type *) ((device char *) src0 + offset0);
+     }
+ 
+-    float sumf[NR0] = {0.f};
++    device const block_q_type * ax2[NR0];
++    if (MODE == 2) {
++        FOR_UNROLL (int row = 0; row < NR0; ++row) {
++            const uint64_t offset0 = (r0 + row)*args.nb01 + (i12/FC_mul_mv_r2)*args.nb02 + (i13/FC_mul_mv_r3)*args.nb03;
+ 
++            ax2[row] = (device const block_q_type *) ((device char *) src0b + offset0);
++        }
++    }
++
++    float sumf[NR0]  = {0.f};
++    float sumf2[NR0] = {0.f};
++
++    if (MODE == 1 && tiisg == 0) {
++        FOR_UNROLL (short row = 0; row < NR0; ++row) {
++            if (r0 + row < args.ne01) {
++                sumf[row] = addend[r0 + row];
++            }
++        }
++    }
++
+     const short ix = (tiisg/(NW/NQ));
+     const short il = (tiisg%(NW/NQ))*8;
+ 
+@@ -3492,6 +3512,9 @@
+ 
+         FOR_UNROLL (short row = 0; row < NR0; row++) {
+             sumf[row] += block_q_n_dot_y(ax[row] + ib, sumy[0] + sumy[1], yl, il);
++            if (MODE == 2) {
++                sumf2[row] += block_q_n_dot_y(ax2[row] + ib, sumy[0] + sumy[1], yl, il);
++            }
+         }
+ 
+         yb += QK4_0 * 16;
+@@ -3505,12 +3528,31 @@
+     for (int row = 0; row < NR0; ++row) {
+         const float tot = simd_sum(sumf[row]);
+ 
+-        if (tiisg == 0 && r0 + row < args.ne01) {
++        if (MODE == 2) {
++            const float tot2 = simd_sum(sumf2[row]);
++
++            if (tiisg == 0 && r0 + row < args.ne01) {
++                dst_f32[r0 + row] = (tot/(1.0f + exp(-tot)))*tot2;
++            }
++        } else if (tiisg == 0 && r0 + row < args.ne01) {
+             dst_f32[r0 + row] = tot;
+         }
+     }
+ }
+ 
++template<typename block_q_type, short NR0, typename args_t>
++void mul_vec_q_n_f32_impl(
++        args_t args,
++        device const char * src0,
++        device const char * src1,
++        device       char * dst,
++        threadgroup  char * shmem,
++        uint3  tgpig,
++        ushort tiisg,
++        ushort sgitg) {
++    mul_vec_q_n_f32_core<block_q_type, NR0, 0, args_t>(args, src0, src1, dst, nullptr, nullptr, shmem, tgpig, tiisg, sgitg);
++}
++
+ template<int nr0, typename args_t>
+ void kernel_mul_mv_q1_0_f32_impl(
+         args_t args,
+@@ -3602,6 +3644,85 @@
+     mul_vec_q_n_f32_impl<block_q4_0, N_R0_Q4_0, constant ggml_metal_kargs_mul_mv &>(args, src0, src1, dst, shmem, tgpig, tiisg, sgitg);
+ }
+ 
++kernel void kernel_mul_mv_q4_0_f32_add(
++        constant ggml_metal_kargs_mul_mv & args,
++        device const char * src0,
++        device const char * src1,
++        device       char * dst,
++        device const float * addend,
++        threadgroup  char * shmem [[threadgroup(0)]],
++        uint3  tgpig[[threadgroup_position_in_grid]],
++        ushort tiisg[[thread_index_in_simdgroup]],
++        ushort sgitg[[simdgroup_index_in_threadgroup]]) {
++    mul_vec_q_n_f32_core<block_q4_0, N_R0_Q4_0, 1, constant ggml_metal_kargs_mul_mv &>(args, src0, src1, dst, addend, nullptr, shmem, tgpig, tiisg, sgitg);
++}
++
++kernel void kernel_mul_mv_q4_0_f32_glu(
++        constant ggml_metal_kargs_mul_mv & args,
++        device const char * src0,
++        device const char * src1,
++        device       char * dst,
++        device const char * src0b,
++        threadgroup  char * shmem [[threadgroup(0)]],
++        uint3  tgpig[[threadgroup_position_in_grid]],
++        ushort tiisg[[thread_index_in_simdgroup]],
++        ushort sgitg[[simdgroup_index_in_threadgroup]]) {
++    mul_vec_q_n_f32_core<block_q4_0, 2, 2, constant ggml_metal_kargs_mul_mv &>(args, src0, src1, dst, nullptr, src0b, shmem, tgpig, tiisg, sgitg);
++}
++
++kernel void kernel_mul_mv_q4_0_f32_qkv(
++        constant ggml_metal_kargs_mul_mv_qkv & args,
++        device const char * src0a,
++        device const char * src1,
++        device       char * dsta,
++        device const float * adda,
++        device const char * src0b,
++        device       char * dstb,
++        device const float * addb,
++        device const char * src0c,
++        device       char * dstc,
++        device const float * addc,
++        threadgroup  char * shmem [[threadgroup(0)]],
++        uint3  tgpig[[threadgroup_position_in_grid]],
++        ushort tiisg[[thread_index_in_simdgroup]],
++        ushort sgitg[[simdgroup_index_in_threadgroup]]) {
++    const short NSG = FC_mul_mv_nsg;
++
++    const int rows_per_tg = N_R0_Q4_0*NSG;
++    const int tg_a = (args.mv.ne01 + rows_per_tg - 1)/rows_per_tg;
++    const int tg_b = (args.ne01_b  + rows_per_tg - 1)/rows_per_tg;
++
++    ggml_metal_kargs_mul_mv a = args.mv;
++
++    device const char  * src0   = src0a;
++    device       char  * dst    = dsta;
++    device const float * addend = adda;
++
++    uint3 tg = tgpig;
++
++    if (tg.x >= tg_a) {
++        tg.x -= tg_a;
++
++        if (tg.x >= tg_b) {
++            tg.x -= tg_b;
++
++            a.ne01 = args.ne01_c;
++            src0   = src0c;
++            dst    = dstc;
++            addend = addc;
++        } else {
++            a.ne01 = args.ne01_b;
++            src0   = src0b;
++            dst    = dstb;
++            addend = addb;
++        }
++
++        a.ne0 = a.ne01;
++    }
++
++    mul_vec_q_n_f32_core<block_q4_0, N_R0_Q4_0, 1, ggml_metal_kargs_mul_mv>(a, src0, src1, dst, addend, nullptr, shmem, tg, tiisg, sgitg);
++}
++
+ kernel void kernel_mul_mv_q4_1_f32(
+         constant ggml_metal_kargs_mul_mv & args,
+         device const char * src0,
+@@ -4694,6 +4815,130 @@
+     }
+ }
+ 
++template<typename TI>
++kernel void kernel_rope_neox_set_rows(
++        constant ggml_metal_kargs_rope_set_rows & args,
++        device const char * src0,
++        device const char * src1,
++        device const char * src2,
++        device       char * dst,
++        device const char * idxs,
++        device const char * srcv,
++        device       char * dstv,
++        device const char * idxsv,
++        device const char * srcq,
++        device       char * dstq,
++        ushort  tiitg[[thread_index_in_threadgroup]],
++        ushort3 tptg [[threads_per_threadgroup]],
++        uint3   tgpig[[threadgroup_position_in_grid]]) {
++    constant ggml_metal_kargs_rope & r = args.rope;
++
++    const int i2 = tgpig[1];
++    int       i1 = tgpig[0];
++
++    if (i1 < args.n_q) {
++        constant ggml_metal_kargs_rope & rq = args.rope_q;
++
++        float corr_dims_q[2];
++        rope_yarn_corr_dims(rq.n_dims, rq.n_ctx_orig, rq.freq_base, rq.beta_fast, rq.beta_slow, corr_dims_q);
++
++        device const int32_t * pos_q = (device const int32_t *) src1;
++
++        const float theta_base_q = (float) pos_q[i2];
++        const float inv_ndims_q = -1.f/rq.n_dims;
++
++        float cos_q;
++        float sin_q;
++
++        for (int i0 = 2*tiitg; i0 < rq.ne0; i0 += 2*tptg.x) {
++            if (i0 < rq.n_dims) {
++                const int ic = i0/2;
++
++                const float theta = theta_base_q * pow(rq.freq_base, inv_ndims_q*i0);
++
++                const float freq_factor = rq.src2 ? ((device const float *) src2)[ic] : 1.0f;
++
++                rope_yarn(theta/freq_factor, rq.freq_scale, corr_dims_q, i0, rq.ext_factor, rq.attn_factor, &cos_q, &sin_q);
++
++                device const float * const src = (device const float *)(srcq + i2*rq.nb02 + i1*rq.nb01 + ic*rq.nb00);
++                device       float * dst_data  = (device       float *)(dstq + i2*rq.nb2  + i1*rq.nb1  + ic*rq.nb0);
++
++                const float x0 = src[0];
++                const float x1 = src[rq.n_dims/2];
++
++                dst_data[0]              = x0*cos_q - x1*sin_q;
++                dst_data[rq.n_dims/2]    = x0*sin_q + x1*cos_q;
++            } else {
++                device const float * const src = (device const float *)(srcq + i2*rq.nb02 + i1*rq.nb01 + i0*rq.nb00);
++                device       float * dst_data  = (device       float *)(dstq + i2*rq.nb2  + i1*rq.nb1  + i0*rq.nb0);
++
++                dst_data[0] = src[0];
++                dst_data[1] = src[1];
++            }
++        }
++
++        return;
++    }
++
++    i1 -= args.n_q;
++
++    if (args.n_v > 0 && i1 >= r.ne1) {
++        const int c = i1 - r.ne1;
++
++        device const float * s = ((device const float *) (srcv + i2*args.nb01_v)) + c*r.ne0;
++
++        const TI row_v = ((device const TI *) (idxsv + i2*args.nb10_v))[0];
++
++        device half * o = ((device half *) (dstv + row_v*args.nb1_dst_v)) + c*r.ne0;
++
++        for (int i = tiitg; i < r.ne0; i += tptg.x) {
++            o[i] = (half) s[i];
++        }
++
++        return;
++    }
++
++    float corr_dims[2];
++    rope_yarn_corr_dims(r.n_dims, r.n_ctx_orig, r.freq_base, r.beta_fast, r.beta_slow, corr_dims);
++
++    device const int32_t * pos = (device const int32_t *) src1;
++
++    const float theta_base = (float) pos[i2];
++    const float inv_ndims = -1.f/r.n_dims;
++
++    const TI row = ((device const TI *) (idxs + i2*args.nb10))[0];
++
++    device half * out = ((device half *) (dst + row*args.nb1_dst)) + i1*r.ne0;
++
++    float cos_theta;
++    float sin_theta;
++
++    for (int i0 = 2*tiitg; i0 < r.ne0; i0 += 2*tptg.x) {
++        if (i0 < r.n_dims) {
++            const int ic = i0/2;
++
++            const float theta = theta_base * pow(r.freq_base, inv_ndims*i0);
++
++            const float freq_factor = r.src2 ? ((device const float *) src2)[ic] : 1.0f;
++
++            rope_yarn(theta/freq_factor, r.freq_scale, corr_dims, i0, r.ext_factor, r.attn_factor, &cos_theta, &sin_theta);
++
++            device const float * const src = (device const float *)(src0 + i2*r.nb02 + i1*r.nb01 + ic*r.nb00);
++
++            const float x0 = src[0];
++            const float x1 = src[r.n_dims/2];
++
++            out[ic]               = (half) (x0*cos_theta - x1*sin_theta);
++            out[ic + r.n_dims/2]  = (half) (x0*sin_theta + x1*cos_theta);
++        } else {
++            device const float * const src = (device const float *)(src0 + i2*r.nb02 + i1*r.nb01 + i0*r.nb00);
++
++            out[i0]     = (half) src[0];
++            out[i0 + 1] = (half) src[1];
++        }
++    }
++}
++
+ template<typename T>
+ kernel void kernel_rope_multi(
+         constant ggml_metal_kargs_rope & args,
+@@ -4854,6 +5099,11 @@
+ 
+ template [[host_name("kernel_rope_neox_f32")]] kernel kernel_rope_neox_t kernel_rope_neox<float>;
+ template [[host_name("kernel_rope_neox_f16")]] kernel kernel_rope_neox_t kernel_rope_neox<half>;
++
++typedef decltype(kernel_rope_neox_set_rows<int64_t>) kernel_rope_neox_set_rows_t;
++
++template [[host_name("kernel_rope_neox_set_rows_i64")]] kernel kernel_rope_neox_set_rows_t kernel_rope_neox_set_rows<int64_t>;
++template [[host_name("kernel_rope_neox_set_rows_i32")]] kernel kernel_rope_neox_set_rows_t kernel_rope_neox_set_rows<int32_t>;
+ 
+ template [[host_name("kernel_rope_multi_f32")]] kernel kernel_rope_multi_t kernel_rope_multi<float>;
+ template [[host_name("kernel_rope_multi_f16")]] kernel kernel_rope_multi_t kernel_rope_multi<half>;

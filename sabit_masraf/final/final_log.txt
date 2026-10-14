@@ -1,0 +1,23 @@
+FAZ A: cikti esitligi 200 token
+DOGRULUK 05: AYNI (    1111 bayt)
+DOGRULUK 15: AYNI (    1118 bayt)
+DOGRULUK 7: AYNI (    1108 bayt)
+FAZ B: perplexity (-b 1 -ub 1)
+PPL 05 kapali: 0.05.166.948 I Final estimate: PPL = 15.1521 +/- 1.75584
+PPL 05 final: 0.04.079.632 I Final estimate: PPL = 15.1499 +/- 1.75555
+PPL 15 kapali: 0.06.272.337 I Final estimate: PPL = 9.8477 +/- 1.29919
+PPL 15 final: 0.05.306.625 I Final estimate: PPL = 9.8475 +/- 1.29918
+PPL 7 kapali: 0.09.585.341 I Final estimate: PPL = 5.7262 +/- 0.95953
+PPL 7 final: 0.09.196.491 I Final estimate: PPL = 5.7267 +/- 0.95967
+FAZ C: hiz 5 tur
+model 05  kapali         ort 3.0045 ms  tur: 2.943 3.122 2.917 2.925 3.115  (tabana gore +0.0000 ms, tabandan hizli 0/5 tur)
+model 05  final          ort 2.5492 ms  tur: 2.457 2.608 2.458 2.618 2.606  (tabana gore -0.4554 ms, tabandan hizli 5/5 tur)
+model 15  kapali         ort 5.4030 ms  tur: 5.410 5.397 5.401 5.404 5.403  (tabana gore +0.0000 ms, tabandan hizli 0/5 tur)
+model 15  final          ort 4.9785 ms  tur: 4.975 4.957 4.977 4.982 5.002  (tabana gore -0.4246 ms, tabandan hizli 5/5 tur)
+model 7   kapali         ort 18.3393 ms  tur: 18.459 18.312 18.293 18.353 18.278  (tabana gore +0.0000 ms, tabandan hizli 0/5 tur)
+model 7   final          ort 17.7376 ms  tur: 17.833 17.693 17.811 17.661 17.690  (tabana gore -0.6016 ms, tabandan hizli 5/5 tur)
+FAKTOR_BITTI
+FAZ D: tahminli uretme
+SPEC k=1 bitti
+SPEC k=2 bitti
+FINAL_BITTI

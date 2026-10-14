@@ -74,10 +74,13 @@ Olası sebep: orijinal oturumda bellek baskısı/mmap tahliyesi (bulut D4). Yama
 Greedy (essay, n=300) ek seri: k=0 53.2/53.3 (SB0/SB1 başa baş), k=2 SB0 48.0 → SB1 53.2, k=5 SB0 43.1 → SB1 51.4.
 Manşet bulgu (kod işinde yamayla 2.4x, k=7'de yamasıza göre 2.8x) bağımsız tekrarla DOĞRULANDI.
 
-## 5. Kalan işler (bulut listesinden koşulmadı)
+## 5. Bulut listesinin durumu
 
-E1 (xctrace per-kernel süreler), E4/E5 (skaler kernel düzeni ve x trafiği, mikro), E6 (mul_mv_ext ayar taraması),
-E7 (split-K), E10 (tavan varyantları), E11 (K-quant/IQ bant verimi — en büyük açık kaldıraç), E12-E18.
+İlk yazımda bu bölüm "kalan işler" listesiydi; sonradan koşuldu.
+
+Koşuldu: E1 kısmi (bölüm 7), E4/E5 (10), E6 (9), E7 faz 1-5 (15, 17), E10 (13), E11 (6), E12 (8), E13/E15/E16 (11), E14/E9/E17 (12), E19 (16), E20/E21 (18), E22 (19).
+
+Açık: E1'in kernel adlı dökümü (E18, `.gputrace` yolu), E7 split-K (bölüm 19 kararı: şimdilik girilmiyor).
 
 ## 6. E11: K-quant/IQ formatlarının bant verimi (1.5B, tg128 r=5 mmap kapalı; PPL wikitext 32 chunk c=512)
 
@@ -202,6 +205,8 @@ Tutarlı açıklama: NR0/occupancy kolu yalnız bellek tavanından uzak kernel'l
 
 ## 15. E7 faz 1-4: B=2-8 MMA kernel'i gecikme-zinciri sınırlı (üç tahmin çöktü, teşhis netleşti)
 
+GEÇERSİZ TEŞHİS: "gecikme-zinciri sınırlı" hükmü bölüm 17'de çürütüldü; bölüm 19'daki sayaçlar da "hesap tavanında" hükmünü doğrulamadı. Aşağıdaki varyant ölçümleri geçerli, yorum geçersiz.
+
 Ölçüm düzeni: llama-batched-bench, 7B oq4 (lm_head q4_0), npl=B, grup maliyeti = B×1000/S_TG ms.
 Taban hesap (roofline, okunan 3.98 GB): B≤6 için 17.5 ms (1.00x), B=8 için 20.2 ms (1.15x).
 
@@ -266,6 +271,8 @@ istemler (mk_prompts.py, seed 7), greedy. Kıyas: yamalı llama.cpp + oq4.
 
 ## 17. E7 kapanışı: 35 ms duvarı gecikme değil, SABİT MMA SAYISI (teşhis düzeltildi, beş çürütme ile)
 
+Not: "kernel HESAP sınırlı" cümlesi bölüm 19'da sayaçla doğrulanmadı (ALU %42, F32 sınırlayıcı %68). "Sabit 8 sütun işi" kısmı doğrulandı.
+
 Faz 5 (v5 = yazılım boru hattı, blok döngüsü 2'li/4'lü açık, yükler hesaptan önce; aynı zincirde v1 önce):
 
 | varyant | B=2 | B=4 | B=8 (ms) |
@@ -311,7 +318,9 @@ Kernel'in yük deseni zaten düzgün (coalesced qs, satırlara amortize y, tg-ta
 değişkenli ucuz kaldıracı kalmadı; E7 dersiyle (üst üste çürüyen kernel tahminleri) buradaki kazı
 durduruldu. IQ4_XS son durumu: NR0=8 ile 171.6 tok/s, 1.5B tavsiyesi değişmedi.
 
-### E20 eki: NR0 yaması 7B IQ4_XS'te de ölçüldü — kazanç +%4.4 (formata özel, modele özel değil)
+### E20 eki: NR0 yaması 7B IQ4_XS'te de ölçüldü
+
+DÜZELTME: aşağıdaki tabloda "upstream" yazan satır NR0=4'tür. Gerçek upstream değeri 2 (`llama_patch/nr0_tune.diff`: `-#define N_R0_IQ4_XS 2`). Yüzdeler NR0=4'e göredir. Doğru taban ile tablo eki-3'te.
 
 Soru: N_R0_IQ4_XS=8 yaması 1.5B'ye mi özgü? Bartowski Qwen2.5-7B-Instruct-IQ4_XS indirildi
 (4.213 GB; token_embd IQ4_XS 0.290 GB, output Q6_K 0.447 GB, tied değil → okunan 3.923 GB;
@@ -321,18 +330,19 @@ damgası + test-backend-ops 3/3 + 7B q4_0 kontrolü (tg128, 5 tekrar):
 | N_R0_IQ4_XS | 7B IQ4_XS tok/s | tabana oran | q4_0 kontrol |
 |---|---|---|---|
 | 8 (yama) | 52.09 ± 0.10 | %90.0 | 57.03 ± 0.08 |
-| 4 (upstream) | 49.91 ± 0.03 | %86.2 | 56.93 ± 0.09 |
+| 4 (upstream DEĞİL, eki-3'e bak) | 49.91 ± 0.03 | %86.2 | 56.93 ± 0.09 |
 | 8 (geri alım doğrulama) | 51.94 ± 0.05 | %89.7 | 57.01 ± 0.04 |
 
-- Yama 7B'de de çalışıyor ama kazanç +%4.4 (1.5B'de +%38 idi): 7B'de kernel NR0=4 ile zaten
-  tabanın %86'sındaydı, amorti edilecek pay küçük. (İlk yazımda "kazanç model küçüldükçe
-  büyüyor" demiştim; ek-2'deki Gemma ölçümü bunu ÇÜRÜTTÜ — belirleyici olan boyut değil,
-  bazın tabana uzaklığı.)
+- Bu tabloda kazanç NR0=4'e göre +%4.4. Gerçek upstream (NR0=2) tabanına göre +%15.3 (eki-3).
+- Önceki yorum ("1.5B'de +%38 idi", "kernel zaten tabanın %86'sındaydı, amorti edilecek pay küçük")
+  silindi: +%38 sayısının ölçüm kaydı yok, 1.5B'de doğru karşılaştırma +%9 (157.1 → 171.7).
 - Pratik not: 7B'de IQ4_XS (52.1) q4_0'dan (57.0) YAVAŞ, dosya ise neredeyse aynı boyutta
   (3.92 vs 3.99 GiB; bartowski output'u Q6_K tuttuğu için bit tasarrufu erimiş). 7B'de hız
   için q4_0, kalite için IQ4_XS; 1.5B'deki tablonun aynısı.
 
-### E20 eki-2: Aynı A/B Gemma-3'te — kazanç boyutla değil, bazın tabana uzaklığıyla ölçekleniyor
+### E20 eki-2: Aynı A/B Gemma-3'te
+
+DÜZELTME: "upstream" yazan satır yine NR0=4'tür; başlıktaki eski yorum ("bazın tabana uzaklığıyla ölçekleniyor") eki-3'teki doğru tabanla tutmadığı için kaldırıldı.
 
 Bartowski Gemma-3 1B ve 4B IQ4_XS (ikisi de tied; 1B: toplam 0.708 GB, token_embd Q8_0 0.321 GB
 → taban 224.8 tok/s; 4B: toplam 2.257 GB, token_embd Q6_K 0.551 GB → taban 94.1 tok/s). Tied
@@ -343,18 +353,54 @@ Qwen 1.5B q4_0 (185.1-185.4 üç koşuda sabit):
 | N_R0_IQ4_XS | Gemma 1B tok/s | Gemma 4B tok/s |
 |---|---|---|
 | 8 (yama) | 182.57 ± 1.13 | 78.92 ± 0.05 |
-| 4 (upstream) | 186.95 ± 0.26 | 77.66 ± 0.05 |
+| 4 (upstream DEĞİL, eki-3'e bak) | 186.95 ± 0.26 | 77.66 ± 0.05 |
 | 8 (geri alım doğrulama) | 183.53 ± 0.37 | 78.92 ± 0.07 |
 
-- Gemma 4B: yama +%1.6. Gemma 1B: yama −%2.3 (İLK NEGATİF ÖRNEK — gürültü dışı, iki koşuda
-  tekrarlanabilir). Dört modelin tablosu: Qwen 1.5B +%38, Qwen 7B +%4.4, Gemma 4B +%1.6,
-  Gemma 1B −%2.3.
-- Desen boyut değil: NR0=4 bazı tabandan ne kadar uzaksa yama o kadar kazandırıyor (Qwen 1.5B
-  bazı %63'teydi → büyük kazanç; Gemma'lar %82-83'te → pay yok). Gemma 1B'deki küçük zararın
-  muhtemel mekanizması satır sayısı azken NR0=8'in threadgroup sayısını yarılaması (occupancy);
-  ölçülmedi, hipotez olarak not.
-- Varsayılan karar: N_R0_IQ4_XS=8 KALIYOR (+%38'lik kazanım −%2.3'lük zarara ağır basar);
-  Gemma-1B sınıfı model ana yük olursa 4'e döndürülebilir. 3.5 bpw düzlem formatı mat-vec'te TAVANDA — hızlı 3-bit'in yapıcı kanıtı
+- Bu tablo NR0=8'i NR0=4 ile kıyaslar: Gemma 4B +%1.6, Gemma 1B −%2.3. Eki-3'te Gemma 1B'de NR0=4 yine NR0=8'den ~%2 hızlı çıktı (tekrarlandı). Upstream NR0=2'ye göre ise Gemma 1B'de fark yok. "İlk negatif örnek" yalnız NR0=4'e göre doğru.
+- Silinen yorumlar: "dört modelin tablosu +%38 / +%4.4 / +%1.6 / −%2.3" (karışık tabanlı, +%38'in kaydı yok),
+  "kazanç bazın tabana uzaklığıyla ölçeklenir" ve "Qwen 1.5B bazı %63'teydi" (%63'ün kaydı yok).
+- Kalan açık hipotez (ölçülmedi): Gemma 1B'de NR0=8, satır sayısı azken threadgroup sayısını yarıya indirdiği için (occupancy) NR0=4'ten yavaş olabilir.
+- Varsayılan karar: N_R0_IQ4_XS=8 KALIYOR; gerekçe eki-3'te (upstream'e göre +%9, +%15, +%9, Gemma 1B'de fark yok). Gemma-1B sınıfı model ana yük olursa 4 daha iyi.
+
+### E20 eki-3: NR0 A/B yeniden ölçüldü, doğru tabanla (NR0=2)
+
+Neden: eki ve eki-2 tablolarında "4 (upstream)" yazıyordu. Üç NR0 değeri de aynı anda ölçülmemişti.
+Soru: N_R0_IQ4_XS=8, gerçek upstream değeri 2'ye göre ne kazandırıyor?
+
+Düzen: tek değişken, her NR0 değeri için ayrı derleme (derleme farkı kütüphane md5'inden doğrulandı; aynı NR0 iki derlemede aynı md5).
+Sıra 2, 4, 8, 4, 2, 8 (sıra etkisi dengelensin). Her hücre iki ayrı derlemede, her biri tg128, -r 5, mmap kapalı.
+Ölçen: Sonnet 5.5 oturumu (belge düzeltme turu), 11 Eki 2026. Önceki ölçümlerle uyum: 7B NR0=8 51.6 (eski 52.1/51.9), NR0=4 49.8 (eski 49.9).
+Komut dosyaları ve ham CSV'ler `~/claude-scratch/nr0-dogrulama/` altında, repoda yok.
+
+tok/s, iki derlemenin ortalaması (parantez içi iki koşu):
+
+| model | NR0=2 (upstream) | NR0=4 | NR0=8 (yama) |
+|---|---|---|---|
+| Qwen 1.5B IQ4_XS | 157.1 (157.05, 157.23) | 169.2 (169.05, 169.44) | 171.7 (171.64, 171.67) |
+| Qwen 7B IQ4_XS | 44.78 (44.78, 44.77) | 49.76 (49.85, 49.67) | 51.64 (51.71, 51.57) |
+| Gemma 4B IQ4_XS | 71.76 (71.92, 71.60) | 77.39 (77.37, 77.40) | 78.46 (78.42, 78.51) |
+| Gemma 1B IQ4_XS | 182.9 (183.52, 182.35) | 185.8 (186.41, 185.18) | 182.0 (183.01, 180.99) |
+| kontrol: 1.5B q4_0 (NR0'dan etkilenmez) | 183.7 | 181.2 | 181.9 |
+
+Fark:
+
+| model | 4 / 2 | 8 / 2 (yama kazancı) | 8 / 4 |
+|---|---|---|---|
+| Qwen 1.5B | +%7.7 | **+%9.2** | +%1.4 |
+| Qwen 7B | +%11.1 | **+%15.3** | +%3.8 |
+| Gemma 4B | +%7.8 | **+%9.3** | +%1.4 |
+| Gemma 1B | +%1.6 | −%0.5 | −%2.0 |
+
+Bulgular:
+- Yama upstream'e göre üç modelde +%9 ile +%15 kazandırıyor; iki derleme arasındaki oynama %0.5'in altında.
+- Gemma 1B'de yama upstream'e göre etkisiz (−%0.5). NR0=4 ise NR0=8'den ~%2 hızlı: iki derlemede aralıklar çakışmıyor (4: 185.2-186.4, 8: 181.0-183.0) ve eki-2'deki eski ölçümle aynı yönde.
+- Qwen 1.5B, 7B ve Gemma 4B'de NR0=4 kazancın çoğunu veriyor (+%8-11); 4'ten 8'e ek kazanç %1-4. Gemma 1B'de en iyi değer 4.
+- Kontrol q4_0 sırayla 184.3, 183.5, 181.7, 178.8, 183.1, 182.0 çıktı (en düşük koşuda ±4.4): ısınma ve gürültü payı %1-3. Bu yüzden %2'nin altındaki farklar tek derlemeyle yorumlanmaz.
+- Neden bazı modellerde kazanç daha büyük, ölçülmedi. Önceki "bazın tabana uzaklığı" açıklaması bu verilerle de tutmuyor
+  (1.5B tabanın ~%83'ünde +%9, Gemma 1B ~%81'inde 0).
+- Ölçüm sonrası ağaç geri alındı: header ilk haliyle aynı, NR0=8, kütüphane md5 NR0=8 derlemesiyle aynı.
+
+### E21: 3.5 bpw düzlem formatı mat-vec'te TAVANDA — hızlı 3-bit'in yapıcı kanıtı
 
 Mikro: micro/mv3p.metal + mv3p.swift (16384×16384, SoA: 2-bit düzlem + 1-bit düzlem + blok-32 fp16 ölçek
 = 3.5 bpw; E13'ün T3 sihirli açması; CPU çift-duyarlık doğrulaması 2 satır, göreli fark ≤1e-6; 600 ms

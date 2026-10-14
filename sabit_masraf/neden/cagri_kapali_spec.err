@@ -1,0 +1,111 @@
+0.00.025.387 I common_init_result: fitting params to device memory ...
+0.00.025.390 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.194.428 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=957 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.668.193 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+GGML_METAL_FUSE_STATS: dugum=957 sutun=2 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=2 gpu_cagrisi=592 bariyer=421
+0.00.718.763 I common_init_result: fitting params to device memory ...
+0.00.718.765 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.882.244 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=16 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: dugum=821 sutun=512 birlesen_glu=0 birlesen_ekle=0
+0.00.960.013 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+GGML_METAL_FUSE_STATS: dugum=821 sutun=2 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=2 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: dugum=957 sutun=3 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: dugum=957 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=1 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: dugum=821 sutun=4 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=4 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: dugum=821 sutun=1 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: dugum=957 sutun=3 birlesen_glu=0 birlesen_ekle=0
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+GGML_METAL_FUSE_STATS: graf dugum=957 sutun=3 gpu_cagrisi=592 bariyer=421
+GGML_METAL_FUSE_STATS: graf dugum=821 sutun=1 gpu_cagrisi=508 bariyer=362
+0.01.383.764 I encoded    4 tokens in    0.026 seconds, speed:  153.046 t/s
+0.01.383.765 I decoded   25 tokens in    0.381 seconds, speed:   65.683 t/s
+0.01.383.765 I 
+0.01.383.765 I n_draft   = 2
+0.01.383.765 I n_predict = 25
+0.01.383.765 I n_drafted = 22
+0.01.383.765 I n_accept  = 13
+0.01.383.765 I accept    = 59.091%
+0.01.383.765 I 
+0.01.383.766 I draft:
+
+0.01.383.768 I 
+0.01.383.768 I target:
+
+0.01.383.769 I common_perf_print:    sampling time =       2.02 ms
+0.01.383.769 I common_perf_print:    samplers time =       1.05 ms /    25 tokens
+0.01.383.769 I common_perf_print:        load time =     546.38 ms
+0.01.383.769 I common_perf_print: prompt eval time =     294.68 ms /    37 tokens (    7.96 ms per token,   125.56 tokens per second)
+0.01.383.770 I common_perf_print:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+0.01.383.770 I common_perf_print:       total time =     665.03 ms /    38 tokens
+0.01.383.771 I common_perf_print: unaccounted time =     368.33 ms /  55.4 %      (total - sampling - prompt eval - eval) / (total)
+0.01.383.771 I common_perf_print:    graphs reused =         10

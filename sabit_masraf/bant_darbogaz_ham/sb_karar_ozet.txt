@@ -1,0 +1,17 @@
+p=2 kapali    ort 19.341 ms  fark +0.000 ms (%+0.0)  kapaliya gore hizli 0/4 tur  tur 18.68 19.99 19.09 19.61
+p=2 ekle      ort 19.249 ms  fark -0.092 ms (%-0.5)  kapaliya gore hizli 3/4 tur  tur 18.60 20.57 18.46 19.36
+p=2 ekle_qkv  ort 20.549 ms  fark +1.209 ms (%+6.3)  kapaliya gore hizli 1/4 tur  tur 23.44 20.46 20.27 18.03
+p=2 hepsi     ort 19.321 ms  fark -0.020 ms (%-0.1)  kapaliya gore hizli 2/4 tur  tur 19.53 19.68 19.95 18.12
+p=3 kapali    ort 23.446 ms  fark +0.000 ms (%+0.0)  kapaliya gore hizli 0/4 tur  tur 23.19 23.87 23.46 23.26
+p=3 ekle      ort 22.961 ms  fark -0.485 ms (%-2.1)  kapaliya gore hizli 3/4 tur  tur 22.69 22.79 22.77 23.60
+p=3 ekle_qkv  ort 23.002 ms  fark -0.444 ms (%-1.9)  kapaliya gore hizli 4/4 tur  tur 22.86 23.31 22.71 23.12
+p=3 hepsi     ort 26.714 ms  fark +3.267 ms (%+13.9)  kapaliya gore hizli 0/4 tur  tur 26.58 26.74 26.69 26.84
+p=4 kapali    ort 33.876 ms  fark +0.000 ms (%+0.0)  kapaliya gore hizli 0/4 tur  tur 35.92 33.56 33.05 32.97
+p=4 ekle      ort 33.246 ms  fark -0.631 ms (%-1.9)  kapaliya gore hizli 4/4 tur  tur 34.62 33.32 32.54 32.50
+p=4 ekle_qkv  ort 32.106 ms  fark -1.770 ms (%-5.2)  kapaliya gore hizli 4/4 tur  tur 33.43 31.81 31.43 31.75
+p=4 hepsi     ort 31.814 ms  fark -2.063 ms (%-6.1)  kapaliya gore hizli 4/4 tur  tur 33.03 31.78 31.26 31.18
+p=5 kapali    ort 32.385 ms  fark +0.000 ms (%+0.0)  kapaliya gore hizli 0/4 tur  tur 32.76 32.31 32.20 32.27
+p=5 ekle      ort 31.927 ms  fark -0.458 ms (%-1.4)  kapaliya gore hizli 4/4 tur  tur 32.10 31.96 31.63 32.01
+p=5 ekle_qkv  ort 31.984 ms  fark -0.401 ms (%-1.2)  kapaliya gore hizli 4/4 tur  tur 32.01 32.09 31.84 32.00
+p=5 hepsi     ort 31.536 ms  fark -0.849 ms (%-2.6)  kapaliya gore hizli 4/4 tur  tur 31.75 31.55 31.43 31.41
+KARAR_BITTI
